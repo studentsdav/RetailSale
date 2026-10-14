@@ -23,6 +23,8 @@ class _PaymentGatewaysScreenState extends State<PaymentGatewaysScreen> with Sing
   List<Map<String, dynamic>> _dbPaymentMethods = [];
   bool _loadingMethods = false;
 
+  bool _enablePaymentGateway = false;
+
   // 2. India (UPI, Razorpay, PineLabs / Ezetap POS)
   bool _upiEnabled = true;
   final _upiIdCtrl = TextEditingController();
@@ -254,6 +256,7 @@ class _PaymentGatewaysScreenState extends State<PaymentGatewaysScreen> with Sing
       if (res['success'] == true && res['data'] != null) {
         final d = res['data'];
         setState(() {
+          _enablePaymentGateway = d['enable_payment_gateway'] == true;
           _settlementMode = d['settlement_mode'] ?? 'DIRECT';
 
           // UPI
@@ -320,6 +323,7 @@ class _PaymentGatewaysScreenState extends State<PaymentGatewaysScreen> with Sing
     setState(() => _saving = true);
     try {
       final payload = {
+        'enable_payment_gateway': _enablePaymentGateway,
         'settlement_mode': _settlementMode,
         'upi': {
           'enabled': _upiEnabled,
@@ -708,6 +712,21 @@ class _PaymentGatewaysScreenState extends State<PaymentGatewaysScreen> with Sing
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _buildCard(
+            title: 'Payment Gateway & Virtual POS Simulator',
+            subtitle: 'Enable or disable payment gateways and the POS sandbox simulator on checkout',
+            icon: Icons.developer_board,
+            iconColor: Colors.teal,
+            child: SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              activeThumbColor: Colors.teal,
+              title: const Text('Enable Payment Gateway & POS Simulator', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              subtitle: const Text('When enabled, payment gateways and the Virtual POS Simulator (UPI / Smart Card / M-Pesa test charges) will be displayed on the checkout dialog. When disabled, the simulator is completely hidden.', style: TextStyle(fontSize: 12, color: Colors.black54)),
+              value: _enablePaymentGateway,
+              onChanged: (v) => setState(() => _enablePaymentGateway = v),
+            ),
+          ),
+          const SizedBox(height: 16),
           _buildCard(
             title: 'POS Checkout & Bill Settlement Rules',
             subtitle: 'Choose how retail sales bills and restaurant table checks are settled at POS terminals',

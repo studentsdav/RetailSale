@@ -1,5 +1,6 @@
 const audit = require('../../services/audit.service');
 const bcrypt = require("bcryptjs");
+const { Op } = require("sequelize");
 
 const ROLE_PERMISSIONS = {
     ADMIN: ['*'],
@@ -196,6 +197,23 @@ exports.createUser = async (req, res) => {
 
     const hash = await bcrypt.hash(password, 10);
 
+    const cleanPin = pin_code ? pin_code.toString().trim() : null;
+    if (cleanPin) {
+        const existingPinUser = await req.propertyDb.models.users.findOne({
+            where: {
+                outlet_id,
+                pin_code: cleanPin,
+                is_active: true
+            }
+        });
+        if (existingPinUser) {
+            return res.status(400).json({
+                success: false,
+                message: `PIN code '${cleanPin}' is already assigned to active user '${existingPinUser.full_name || existingPinUser.username}'. Each user must have a unique PIN code.`
+            });
+        }
+    }
+
     const defaultRoleDisc = ROLE_MAX_DISCOUNTS[role] ?? 10.0;
     const finalMaxDiscount = (max_discount_percent !== undefined && max_discount_percent !== null)
         ? max_discount_percent
@@ -210,7 +228,7 @@ exports.createUser = async (req, res) => {
         role,
         max_discount_percent: finalMaxDiscount,
         password_hash: hash,
-        pin_code: pin_code ? pin_code.toString().trim() : null,
+        pin_code: cleanPin,
         show_in_quick_login: show_in_quick_login !== undefined ? Boolean(show_in_quick_login) : false,
         is_active: true
     });
@@ -295,6 +313,22 @@ exports.updateUser = async (req, res) => {
     }
     if (pin_code !== undefined) {
         const cleanPin = pin_code ? pin_code.toString().trim() : null;
+        if (cleanPin) {
+            const existingPinUser = await req.propertyDb.models.users.findOne({
+                where: {
+                    outlet_id: user.outlet_id,
+                    pin_code: cleanPin,
+                    is_active: true,
+                    id: { [Op.ne]: user.id }
+                }
+            });
+            if (existingPinUser) {
+                return res.status(400).json({
+                    success: false,
+                    message: `PIN code '${cleanPin}' is already assigned to active user '${existingPinUser.full_name || existingPinUser.username}'. Each user must have a unique PIN code.`
+                });
+            }
+        }
         updatePayload.pin_code = cleanPin;
     }
     if (show_in_quick_login !== undefined) {

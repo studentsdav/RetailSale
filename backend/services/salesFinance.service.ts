@@ -83,11 +83,16 @@ export async function refreshSaleOutstanding({
   sale,
   transaction = undefined
 }: RefreshSaleOutstandingParams): Promise<RefreshSaleOutstandingResult> {
-  const repaymentTotal = await getRepaymentTotal({
-    db,
-    sale_id: sale.id,
+  const repayments = await db.models.customer_repayments.findAll({
+    where: { sale_id: sale.id },
+    order: [['payment_date', 'ASC'], ['id', 'ASC']],
     transaction
   });
+
+  const repaymentTotal = repayments.reduce(
+    (sum: number, r: any) => sum + roundAmount(Number(r.amount) || 0),
+    0
+  );
 
   const parsedInitial = extractInitialPaid(sale);
   const initialPaid =
@@ -106,12 +111,80 @@ export async function refreshSaleOutstanding({
   const balanceDue = !isCredit && rawBalance <= 0.5 ? 0 : Math.max(0, rawBalance);
   const paymentStatus = resolvePaymentStatus(totalPaid, effectiveNet, sale.payment_mode);
 
+  // Reconstruct accurate, up-to-date payment lines reflecting actual initial paid + repayments
+  let initialLines: Array<{ method: string; amount: number }> = [];
+  const ref = String(sale.payment_reference || '').trim();
+  if (ref.startsWith('POSPAY:')) {
+    try {
+      const parsed = JSON.parse(ref.substring(7));
+      if (Array.isArray(parsed)) {
+        initialLines = parsed
+          .filter((l: any) => String(l.method || '').toUpperCase() !== 'CREDIT' && Number(l.amount) > 0)
+          .map((l: any) => ({
+            method: String(l.method || 'CASH').toUpperCase(),
+            amount: roundAmount(Number(l.amount) || 0)
+          }));
+      }
+    } catch (_) {}
+  }
+  if (initialLines.length === 0 && initialPaid > 0.009) {
+    const origMode = String(sale.payment_mode || 'CASH').toUpperCase();
+    const nonCreditMode = (origMode !== 'CREDIT' && origMode !== 'SPLIT') ? origMode : 'CASH';
+    initialLines.push({ method: nonCreditMode, amount: initialPaid });
+  }
+
+  const repaymentLines: Array<{ method: string; amount: number }> = repayments
+    .filter((r: any) => Number(r.amount) > 0)
+    .map((r: any) => ({
+      method: String(r.payment_mode || 'CASH').trim().toUpperCase(),
+      amount: roundAmount(Number(r.amount) || 0)
+    }));
+
+  const methodMap = new Map<string, number>();
+  for (const line of [...initialLines, ...repaymentLines]) {
+    const m = line.method;
+    methodMap.set(m, roundAmount((methodMap.get(m) || 0) + line.amount));
+  }
+  const mergedPaymentLines: Array<{ method: string; amount: number }> = [];
+  for (const [method, amt] of methodMap.entries()) {
+    if (amt > 0.009) {
+      mergedPaymentLines.push({ method, amount: amt });
+    }
+  }
+  if (balanceDue > 0.009) {
+    mergedPaymentLines.push({ method: 'CREDIT', amount: balanceDue });
+  }
+
+  let updatedPaymentReference = sale.payment_reference;
+  if (mergedPaymentLines.length > 0) {
+    updatedPaymentReference = `POSPAY:${JSON.stringify(mergedPaymentLines)}`;
+  }
+
+  let updatedPaymentMode = sale.payment_mode;
+  if (balanceDue > 0.009) {
+    if (totalPaid > 0.009) {
+      updatedPaymentMode = 'SPLIT';
+    } else {
+      updatedPaymentMode = 'CREDIT';
+    }
+  } else {
+    // Fully paid!
+    if (mergedPaymentLines.length === 0) {
+      updatedPaymentMode = 'CASH';
+    } else if (mergedPaymentLines.length === 1) {
+      updatedPaymentMode = mergedPaymentLines[0].method;
+    } else {
+      updatedPaymentMode = 'SPLIT';
+    }
+  }
+
   await sale.update(
     {
       initial_amount_paid: initialPaid,
       amount_paid: totalPaid,
       balance_due: balanceDue,
-      payment_reference: sale.payment_reference,
+      payment_mode: updatedPaymentMode,
+      payment_reference: updatedPaymentReference,
       notes: sale.notes
     },
     { transaction }
@@ -126,10 +199,43 @@ export async function refreshSaleOutstanding({
   };
 }
 
+export async function syncAllSalesOutstanding({
+  db,
+  outletId
+}: {
+  db: any;
+  outletId?: number;
+}) {
+  try {
+    const where: any = {};
+    if (outletId) where.outlet_id = outletId;
+    const repaidSales = await db.models.customer_repayments.findAll({
+      where,
+      attributes: ['sale_id'],
+      group: ['sale_id'],
+      raw: true
+    });
+    const saleIds = repaidSales.map((r: any) => r.sale_id).filter(Boolean);
+    for (const sId of saleIds) {
+      try {
+        const sale = await db.models.sales_headers.findByPk(sId);
+        if (sale) {
+          await refreshSaleOutstanding({ db, sale });
+        }
+      } catch (e) {
+        console.warn(`Error syncing sale ${sId}:`, e);
+      }
+    }
+  } catch (err) {
+    console.warn('Error in syncAllSalesOutstanding:', err);
+  }
+}
+
 module.exports = {
   roundAmount,
   resolvePaymentStatus,
   extractInitialPaid,
   getRepaymentTotal,
-  refreshSaleOutstanding
+  refreshSaleOutstanding,
+  syncAllSalesOutstanding
 };

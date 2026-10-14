@@ -104,6 +104,7 @@ class ApiEndpoints {
   static const financeApplyAdvance = '/api/finance/advances/apply';
   static const financeOpeningBalance = '/api/finance/opening-balance';
   static const financeCreditReport = '/api/finance/credit-report';
+  static const financeCustomerLedger = '/api/finance/customer-ledger';
   static const financeDeliveryReport = '/api/finance/delivery-report';
   static const financeExpiryReport = '/api/finance/expiry-report';
   static const paySupplierBill = '/api/suppliers/bills/pay';

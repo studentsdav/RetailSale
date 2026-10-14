@@ -1189,6 +1189,8 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
                       headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
                       columnSpacing: 28,
                       horizontalMargin: 14,
+                      dataRowMinHeight: 52,
+                      dataRowMaxHeight: 52,
                       headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFF475569)),
                       dataTextStyle: const TextStyle(fontSize: 12),
                       columns: [
@@ -1240,13 +1242,16 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
                               isEditable
                                   ? SizedBox(
                                       width: 70,
+                                      height: 36,
                                       child: TextFormField(
                                         key: ValueKey('po-qty-$selectedPoId-$i-${item['id']}'),
                                         initialValue: qty.toString(),
+                                        textAlign: TextAlign.center,
+                                        textAlignVertical: TextAlignVertical.center,
                                         style: const TextStyle(fontSize: 12),
                                         decoration: const InputDecoration(
                                           isDense: true,
-                                          contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                                          contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                                           border: OutlineInputBorder(),
                                         ),
                                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -1262,13 +1267,16 @@ class _PurchaseOrderModifyScreenState extends State<PurchaseOrderModifyScreen> {
                               isEditable
                                   ? SizedBox(
                                       width: 80,
+                                      height: 36,
                                       child: TextFormField(
                                         key: ValueKey('po-rate-$selectedPoId-$i-${item['id']}'),
                                         initialValue: rate.toString(),
+                                        textAlign: TextAlign.center,
+                                        textAlignVertical: TextAlignVertical.center,
                                         style: const TextStyle(fontSize: 12),
                                         decoration: const InputDecoration(
                                           isDense: true,
-                                          contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                                          contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                                           border: OutlineInputBorder(),
                                         ),
                                         keyboardType: const TextInputType.numberWithOptions(decimal: true),

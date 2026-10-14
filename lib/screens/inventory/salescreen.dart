@@ -765,6 +765,16 @@ class _SaleScreenState extends State<SaleScreen> {
         });
       }
     } catch (_) {}
+
+    try {
+      final gwRes = await ApiClient.get(ApiEndpoints.paymentGatewaysConfig);
+      if (gwRes['success'] == true && gwRes['data'] != null) {
+        final bool gwEnabled = gwRes['data']['enable_payment_gateway'] == true;
+        if (settingsCtrl.settings != null) {
+          settingsCtrl.settings!.enablePaymentGateway = gwEnabled;
+        }
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadCashierName() async {
@@ -6138,6 +6148,209 @@ class _SaleScreenState extends State<SaleScreen> {
                         },
                       ),
                       const SizedBox(height: 16),
+                      // QUICK PAYMENT METHOD TENDER BUTTONS (UPI / CASH / CARD / CREDIT)
+                      // Only displayed if enabled in payment settlement (_availablePaymentMethods)
+                      Builder(
+                        builder: (_) {
+                          final tenderDefinitions = [
+                            {
+                              'key': 'CASH',
+                              'label': 'Cash',
+                              'icon': Icons.payments_rounded,
+                              'color': const Color(0xFF16A34A),
+                            },
+                            {
+                              'key': 'UPI',
+                              'label': 'UPI',
+                              'icon': Icons.qr_code_2_rounded,
+                              'color': const Color(0xFF2563EB),
+                            },
+                            {
+                              'key': 'CARD',
+                              'label': 'Card',
+                              'icon': Icons.credit_card_rounded,
+                              'color': const Color(0xFFD97706),
+                            },
+                            {
+                              'key': 'CREDIT',
+                              'label': 'Credit',
+                              'icon': Icons.account_balance_wallet_rounded,
+                              'color': const Color(0xFF9333EA),
+                            },
+                          ];
+
+                          bool isEnabledInSettlement(String key) {
+                            final k = key.toUpperCase();
+                            return _availablePaymentMethods.any((m) {
+                              final upper = m.toUpperCase();
+                              if (upper == k) return true;
+                              if (k == 'UPI' && (upper.contains('UPI') || upper.contains('GPAY') || upper.contains('PHONEPE') || upper.contains('PAYTM'))) return true;
+                              if (k == 'CARD' && (upper.contains('CARD') || upper.contains('DEBIT') || upper.contains('CREDIT / DEBIT'))) return true;
+                              if (k == 'CREDIT' && (upper == 'CREDIT' || upper.contains('KHATA') || upper.contains('CUSTOMER CREDIT') || upper.contains('UDHAAR'))) return true;
+                              if (k == 'CASH' && upper == 'CASH') return true;
+                              return false;
+                            });
+                          }
+
+                          String resolveMethodName(String key) {
+                            final k = key.toUpperCase();
+                            for (final m in _availablePaymentMethods) {
+                              if (m.toUpperCase() == k) return m.toUpperCase();
+                            }
+                            for (final m in _availablePaymentMethods) {
+                              final upper = m.toUpperCase();
+                              if (k == 'UPI' && (upper.contains('UPI') || upper.contains('GPAY') || upper.contains('PHONEPE') || upper.contains('PAYTM'))) return upper;
+                              if (k == 'CARD' && (upper.contains('CARD') || upper.contains('DEBIT'))) return upper;
+                              if (k == 'CREDIT' && (upper.contains('CREDIT') || upper.contains('KHATA') || upper.contains('UDHAAR'))) return upper;
+                              if (k == 'CASH' && upper.contains('CASH') && !upper.contains('DELIVERY')) return upper;
+                            }
+                            return k;
+                          }
+
+                          final activeTenders = tenderDefinitions
+                              .where((d) => isEnabledInSettlement(d['key'] as String))
+                              .toList();
+
+                          final alreadyHandledKeys = {'CASH', 'UPI', 'CARD', 'CREDIT'};
+                          for (final m in _availablePaymentMethods) {
+                            final upper = m.toUpperCase();
+                            final isHandled = tenderDefinitions.any((d) =>
+                                isEnabledInSettlement(d['key'] as String) &&
+                                resolveMethodName(d['key'] as String) == upper);
+                            if (!isHandled && !alreadyHandledKeys.contains(upper) && upper != 'CASH ON DELIVERY') {
+                              activeTenders.add({
+                                'key': upper,
+                                'label': m,
+                                'icon': Icons.account_balance_rounded,
+                                'color': const Color(0xFF0D9488),
+                              });
+                            }
+                          }
+
+                          if (activeTenders.isEmpty) return const SizedBox.shrink();
+
+                          final payableTarget = adjustAdvance
+                              ? (_payableInvoiceTotal - math.min(availableAdvance, _payableInvoiceTotal))
+                              : _payableInvoiceTotal;
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 14),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.flash_on, size: 15, color: Color(0xFF2563EB)),
+                                    const SizedBox(width: 6),
+                                    const Text(
+                                      'Quick Tender Payment Mode:',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF334155),
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    Text(
+                                      '${activeTenders.length} Active in Settlement',
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        color: Color(0xFF64748B),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: activeTenders.map((item) {
+                                    final String key = item['key'] as String;
+                                    final String label = item['label'] as String;
+                                    final IconData icon = item['icon'] as IconData;
+                                    final Color color = item['color'] as Color;
+                                    final String resolvedMethod = resolveMethodName(key);
+
+                                    final bool isSelected = lines.length == 1 &&
+                                        lines.first.method.toUpperCase() == resolvedMethod;
+
+                                    return InkWell(
+                                      onTap: () {
+                                        setDialogState(() {
+                                          for (final l in lines) {
+                                            l.amountCtrl.dispose();
+                                          }
+                                          lines.clear();
+                                          lines.add(
+                                            _EditablePaymentLine(
+                                              method: resolvedMethod,
+                                              amountCtrl: TextEditingController(
+                                                text: resolvedMethod == 'CASH ON DELIVERY'
+                                                    ? ''
+                                                    : payableTarget.toStringAsFixed(2),
+                                              ),
+                                            ),
+                                          );
+                                          _paymentMode = resolvedMethod;
+                                          autoBalanceCash();
+                                        });
+                                      },
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: AnimatedContainer(
+                                        duration: const Duration(milliseconds: 180),
+                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                        decoration: BoxDecoration(
+                                          color: isSelected ? color : color.withOpacity(0.08),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(
+                                            color: isSelected ? color : color.withOpacity(0.35),
+                                            width: isSelected ? 2 : 1,
+                                          ),
+                                          boxShadow: isSelected
+                                              ? [
+                                                  BoxShadow(
+                                                    color: color.withOpacity(0.25),
+                                                    blurRadius: 6,
+                                                    offset: const Offset(0, 2),
+                                                  )
+                                                ]
+                                              : null,
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              isSelected ? Icons.check_circle_rounded : icon,
+                                              size: 16,
+                                              color: isSelected ? Colors.white : color,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              label,
+                                              style: TextStyle(
+                                                fontSize: 12.5,
+                                                fontWeight: FontWeight.bold,
+                                                color: isSelected ? Colors.white : color,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
                       // QUICK SPLIT PRESETS (US / INDIA RESTAURANT STANDARDS)
                       Container(
                         padding: const EdgeInsets.all(10),
@@ -6346,9 +6559,13 @@ class _SaleScreenState extends State<SaleScreen> {
                           OutlinedButton.icon(
                             onPressed: () {
                               setDialogState(() {
+                                final defaultAddMethod = _availablePaymentMethods.firstWhere(
+                                  (m) => m.toUpperCase() != 'CASH',
+                                  orElse: () => _availablePaymentMethods.isNotEmpty ? _availablePaymentMethods.first : 'UPI',
+                                );
                                 lines.add(
                                   _EditablePaymentLine(
-                                    method: 'UPI',
+                                    method: defaultAddMethod,
                                     amountCtrl: TextEditingController(),
                                   ),
                                 );
@@ -6367,151 +6584,154 @@ class _SaleScreenState extends State<SaleScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 10),
                       // VIRTUAL POS MACHINE & SANDBOX SIMULATOR (UPI / CARD / M-PESA)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF0FDF4),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFF86EFAC)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.developer_board, size: 16, color: Color(0xFF16A34A)),
-                                const SizedBox(width: 6),
-                                const Text(
-                                  '🧪 Virtual POS & Sandbox Simulator (Test Charges):',
-                                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFF166534)),
-                                ),
-                                const Spacer(),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF16A34A),
-                                    borderRadius: BorderRadius.circular(4),
+                      // Only visible if payment gateway is enabled in system settings
+                      if (settingsCtrl.settings?.enablePaymentGateway == true) ...[
+                        const SizedBox(height: 10),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF0FDF4),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFF86EFAC)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.developer_board, size: 16, color: Color(0xFF16A34A)),
+                                  const SizedBox(width: 6),
+                                  const Text(
+                                    '🧪 Virtual POS & Sandbox Simulator (Test Charges):',
+                                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFF166534)),
                                   ),
-                                  child: const Text('NO HARDWARE NEEDED', style: TextStyle(color: Colors.white, fontSize: 8.5, fontWeight: FontWeight.w800)),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 6,
-                              children: [
-                                ActionChip(
-                                  avatar: const Icon(Icons.qr_code, size: 14, color: Color(0xFF2563EB)),
-                                  label: const Text('Dynamic UPI QR', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
-                                  backgroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: Color(0xFF2563EB))),
-                                  onPressed: () async {
-                                    final due = paymentState.summary.balanceDue > 0 ? paymentState.summary.balanceDue : _payableInvoiceTotal;
-                                    final res = await VirtualPaymentSimulatorDialog.show(
-                                      context,
-                                      amount: due,
-                                      initialMethod: 'UPI',
-                                      billNo: _saleNo.text.isNotEmpty ? _saleNo.text : null,
-                                      upiId: propertyCtrl.data?.upiId,
-                                      upiPayeeName: propertyCtrl.data?.upiPayeeName ?? propertyCtrl.data?.propertyName,
-                                    );
-                                    if (res != null && res.status == 'SUCCESS') {
-                                      setDialogState(() {
-                                        _paymentRef.text = res.referenceId;
-                                        final match = lines.firstWhere(
-                                          (l) => l.method.toUpperCase() == 'UPI',
-                                          orElse: () {
-                                            final newLine = _EditablePaymentLine(
-                                              method: 'UPI',
-                                              amountCtrl: TextEditingController(),
-                                            );
-                                            lines.add(newLine);
-                                            return newLine;
-                                          },
-                                        );
-                                        match.amountCtrl.text = res.amount.toStringAsFixed(2);
-                                        autoBalanceCash();
-                                      });
-                                    }
-                                  },
-                                ),
-                                ActionChip(
-                                  avatar: const Icon(Icons.credit_card, size: 14, color: Color(0xFFD97706)),
-                                  label: const Text('Smart Card Machine', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
-                                  backgroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: Color(0xFFD97706))),
-                                  onPressed: () async {
-                                    final due = paymentState.summary.balanceDue > 0 ? paymentState.summary.balanceDue : _payableInvoiceTotal;
-                                    final res = await VirtualPaymentSimulatorDialog.show(
-                                      context,
-                                      amount: due,
-                                      initialMethod: 'CARD',
-                                      billNo: _saleNo.text.isNotEmpty ? _saleNo.text : null,
-                                    );
-                                    if (res != null && res.status == 'SUCCESS') {
-                                      setDialogState(() {
-                                        _paymentRef.text = res.referenceId;
-                                        final match = lines.firstWhere(
-                                          (l) => l.method.toUpperCase() == 'CARD',
-                                          orElse: () {
-                                            final newLine = _EditablePaymentLine(
-                                              method: 'CARD',
-                                              amountCtrl: TextEditingController(),
-                                            );
-                                            lines.add(newLine);
-                                            return newLine;
-                                          },
-                                        );
-                                        match.amountCtrl.text = res.amount.toStringAsFixed(2);
-                                        autoBalanceCash();
-                                      });
-                                    }
-                                  },
-                                ),
-                                ActionChip(
-                                  avatar: const Icon(Icons.phone_android, size: 14, color: Color(0xFF00A859)),
-                                  label: const Text('M-Pesa STK Push', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
-                                  backgroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: Color(0xFF00A859))),
-                                  onPressed: () async {
-                                    final due = paymentState.summary.balanceDue > 0 ? paymentState.summary.balanceDue : _payableInvoiceTotal;
-                                    final res = await VirtualPaymentSimulatorDialog.show(
-                                      context,
-                                      amount: due,
-                                      initialMethod: 'MPESA',
-                                      billNo: _saleNo.text.isNotEmpty ? _saleNo.text : null,
-                                      mpesaPhone: _customerPhone.text.isNotEmpty ? _customerPhone.text : null,
-                                      upiPayeeName: propertyCtrl.data?.propertyName,
-                                    );
-                                    if (res != null && res.status == 'SUCCESS') {
-                                      setDialogState(() {
-                                        _paymentRef.text = res.referenceId;
-                                        final match = lines.firstWhere(
-                                          (l) => l.method.toUpperCase() == 'MPESA',
-                                          orElse: () {
-                                            final newLine = _EditablePaymentLine(
-                                              method: 'MPESA',
-                                              amountCtrl: TextEditingController(),
-                                            );
-                                            lines.add(newLine);
-                                            return newLine;
-                                          },
-                                        );
-                                        match.amountCtrl.text = res.amount.toStringAsFixed(2);
-                                        autoBalanceCash();
-                                      });
-                                    }
-                                  },
-                                ),
-                              ],
-                            ),
-                          ],
+                                  const Spacer(),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF16A34A),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Text('NO HARDWARE NEEDED', style: TextStyle(color: Colors.white, fontSize: 8.5, fontWeight: FontWeight.w800)),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
+                                children: [
+                                  ActionChip(
+                                    avatar: const Icon(Icons.qr_code, size: 14, color: Color(0xFF2563EB)),
+                                    label: const Text('Dynamic UPI QR', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                                    backgroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: Color(0xFF2563EB))),
+                                    onPressed: () async {
+                                      final due = paymentState.summary.balanceDue > 0 ? paymentState.summary.balanceDue : _payableInvoiceTotal;
+                                      final res = await VirtualPaymentSimulatorDialog.show(
+                                        context,
+                                        amount: due,
+                                        initialMethod: 'UPI',
+                                        billNo: _saleNo.text.isNotEmpty ? _saleNo.text : null,
+                                        upiId: propertyCtrl.data?.upiId,
+                                        upiPayeeName: propertyCtrl.data?.upiPayeeName ?? propertyCtrl.data?.propertyName,
+                                      );
+                                      if (res != null && res.status == 'SUCCESS') {
+                                        setDialogState(() {
+                                          _paymentRef.text = res.referenceId;
+                                          final match = lines.firstWhere(
+                                            (l) => l.method.toUpperCase() == 'UPI',
+                                            orElse: () {
+                                              final newLine = _EditablePaymentLine(
+                                                method: 'UPI',
+                                                amountCtrl: TextEditingController(),
+                                              );
+                                              lines.add(newLine);
+                                              return newLine;
+                                            },
+                                          );
+                                          match.amountCtrl.text = res.amount.toStringAsFixed(2);
+                                          autoBalanceCash();
+                                        });
+                                      }
+                                    },
+                                  ),
+                                  ActionChip(
+                                    avatar: const Icon(Icons.credit_card, size: 14, color: Color(0xFFD97706)),
+                                    label: const Text('Smart Card Machine', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                                    backgroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: Color(0xFFD97706))),
+                                    onPressed: () async {
+                                      final due = paymentState.summary.balanceDue > 0 ? paymentState.summary.balanceDue : _payableInvoiceTotal;
+                                      final res = await VirtualPaymentSimulatorDialog.show(
+                                        context,
+                                        amount: due,
+                                        initialMethod: 'CARD',
+                                        billNo: _saleNo.text.isNotEmpty ? _saleNo.text : null,
+                                      );
+                                      if (res != null && res.status == 'SUCCESS') {
+                                        setDialogState(() {
+                                          _paymentRef.text = res.referenceId;
+                                          final match = lines.firstWhere(
+                                            (l) => l.method.toUpperCase() == 'CARD',
+                                            orElse: () {
+                                              final newLine = _EditablePaymentLine(
+                                                method: 'CARD',
+                                                amountCtrl: TextEditingController(),
+                                              );
+                                              lines.add(newLine);
+                                              return newLine;
+                                            },
+                                          );
+                                          match.amountCtrl.text = res.amount.toStringAsFixed(2);
+                                          autoBalanceCash();
+                                        });
+                                      }
+                                    },
+                                  ),
+                                  ActionChip(
+                                    avatar: const Icon(Icons.phone_android, size: 14, color: Color(0xFF00A859)),
+                                    label: const Text('M-Pesa STK Push', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                                    backgroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: Color(0xFF00A859))),
+                                    onPressed: () async {
+                                      final due = paymentState.summary.balanceDue > 0 ? paymentState.summary.balanceDue : _payableInvoiceTotal;
+                                      final res = await VirtualPaymentSimulatorDialog.show(
+                                        context,
+                                        amount: due,
+                                        initialMethod: 'MPESA',
+                                        billNo: _saleNo.text.isNotEmpty ? _saleNo.text : null,
+                                        mpesaPhone: _customerPhone.text.isNotEmpty ? _customerPhone.text : null,
+                                        upiPayeeName: propertyCtrl.data?.propertyName,
+                                      );
+                                      if (res != null && res.status == 'SUCCESS') {
+                                        setDialogState(() {
+                                          _paymentRef.text = res.referenceId;
+                                          final match = lines.firstWhere(
+                                            (l) => l.method.toUpperCase() == 'MPESA',
+                                            orElse: () {
+                                              final newLine = _EditablePaymentLine(
+                                                method: 'MPESA',
+                                                amountCtrl: TextEditingController(),
+                                              );
+                                              lines.add(newLine);
+                                              return newLine;
+                                            },
+                                          );
+                                          match.amountCtrl.text = res.amount.toStringAsFixed(2);
+                                          autoBalanceCash();
+                                        });
+                                      }
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
+                      ],
                       if (_hasCustomerContext &&
                           availableAdvance > 0 &&
                           _subscriptionItemAdvanceDiscount == 0)

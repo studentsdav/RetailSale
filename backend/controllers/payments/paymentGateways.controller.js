@@ -60,6 +60,7 @@ exports.getGatewaysConfig = async (req, res) => {
         res.json({
             success: true,
             data: {
+                enable_payment_gateway: Boolean(settings?.enable_payment_gateway),
                 settlement_mode: settings?.restaurant_settlement_mode || 'DIRECT',
                 active_methods: safeParseJson(settings?.payment_modes, [
                     { id: 'CASH', name: 'Cash', enabled: true },
@@ -277,13 +278,19 @@ exports.saveGatewaysConfig = async (req, res) => {
         }
 
         // Sync root columns
-        if (updatedRazorpay.enabled) {
+        if (req.body.enable_payment_gateway !== undefined) {
+            settings.set('enable_payment_gateway', Boolean(req.body.enable_payment_gateway));
+        } else if (updatedRazorpay.enabled || updatedStripe.enabled || updatedSquare.enabled || updatedPaypal.enabled || updatedMpesa.enabled || updatedIndiaPos.enabled) {
             settings.set('enable_payment_gateway', true);
+        } else {
+            settings.set('enable_payment_gateway', false);
+        }
+
+        if (updatedRazorpay.enabled) {
             settings.set('payment_gateway_provider', 'RAZORPAY');
             if (updatedRazorpay.key_id) settings.set('payment_gateway_api_key', updatedRazorpay.key_id);
             if (updatedRazorpay.key_secret) settings.set('payment_gateway_secret_key', updatedRazorpay.key_secret);
         } else if (updatedStripe.enabled) {
-            settings.set('enable_payment_gateway', true);
             settings.set('payment_gateway_provider', 'STRIPE');
             if (updatedStripe.publishable_key) settings.set('payment_gateway_api_key', updatedStripe.publishable_key);
             if (updatedStripe.secret_key) settings.set('payment_gateway_secret_key', updatedStripe.secret_key);

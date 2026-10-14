@@ -941,6 +941,14 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                       ? null
                       : () async {
                           if (!formKey.currentState!.validate()) return;
+                          final pCode = pinCode.text.trim();
+                          if (pCode.isNotEmpty) {
+                            final duplicate = users.where((user) => user.pinCode?.trim() == pCode).toList();
+                            if (duplicate.isNotEmpty) {
+                              setDialogState(() => dialogError = 'PIN code "$pCode" is already used by ${duplicate.first.fullName}. Each staff member must have a unique PIN.');
+                              return;
+                            }
+                          }
                           setDialogState(() => isLoading = true);
                           try {
                             await userCtrl.create(
@@ -1384,6 +1392,19 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                       ? null
                       : () async {
                           if (!formKey.currentState!.validate()) return;
+                          final pCode = pinCode.text.trim();
+                          if (pCode.isNotEmpty) {
+                            final duplicate = users.where((user) => user.id != u.id && user.pinCode?.trim() == pCode).toList();
+                            if (duplicate.isNotEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('PIN code "$pCode" is already used by ${duplicate.first.fullName}. Each staff member must have a unique PIN.'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                              return;
+                            }
+                          }
                           setDialogState(() => isLoading = true);
                           try {
                             await userCtrl.update(

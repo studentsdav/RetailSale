@@ -1125,6 +1125,8 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
                       headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
                       columnSpacing: 28,
                       horizontalMargin: 14,
+                      dataRowMinHeight: 52,
+                      dataRowMaxHeight: 52,
                       headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFF475569)),
                       dataTextStyle: const TextStyle(fontSize: 12),
                       columns: [
@@ -1133,6 +1135,8 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
                         const DataColumn(label: Text("Unit")),
                         const DataColumn(label: Text("Qty")),
                         const DataColumn(label: Text("Rate")),
+                        const DataColumn(label: Text("Sale Rate")),
+                        const DataColumn(label: Text("Expiry Date")),
                         DataColumn(
                           label: Text(
                             CountryTaxHelper.taxPercentLabel(
@@ -1173,13 +1177,16 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
                               isEditable
                                   ? SizedBox(
                                       width: 70,
+                                      height: 36,
                                       child: TextFormField(
                                         key: ValueKey('grn-qty-$selectedGrnId-$i-${item['id']}'),
                                         initialValue: qty.toString(),
+                                        textAlign: TextAlign.center,
+                                        textAlignVertical: TextAlignVertical.center,
                                         style: const TextStyle(fontSize: 12),
                                         decoration: const InputDecoration(
                                           isDense: true,
-                                          contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                                          contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                                           border: OutlineInputBorder(),
                                         ),
                                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -1195,13 +1202,16 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
                               isEditable
                                   ? SizedBox(
                                       width: 80,
+                                      height: 36,
                                       child: TextFormField(
                                         key: ValueKey('grn-rate-$selectedGrnId-$i-${item['id']}'),
                                         initialValue: rate.toString(),
+                                        textAlign: TextAlign.center,
+                                        textAlignVertical: TextAlignVertical.center,
                                         style: const TextStyle(fontSize: 12),
                                         decoration: const InputDecoration(
                                           isDense: true,
-                                          contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                                          contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                                           border: OutlineInputBorder(),
                                         ),
                                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -1216,14 +1226,129 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
                             DataCell(
                               isEditable
                                   ? SizedBox(
-                                      width: 70,
+                                      width: 85,
+                                      height: 36,
                                       child: TextFormField(
-                                        key: ValueKey('grn-tax-$selectedGrnId-$i-${item['id']}'),
-                                        initialValue: tax.toString(),
+                                        key: ValueKey('grn-sale-rate-$selectedGrnId-$i-${item['id']}'),
+                                        initialValue: () {
+                                          final sr = _parseDouble(item['sale_rate']);
+                                          return sr > 0 ? sr.toString() : '';
+                                        }(),
+                                        textAlign: TextAlign.center,
+                                        textAlignVertical: TextAlignVertical.center,
                                         style: const TextStyle(fontSize: 12),
                                         decoration: const InputDecoration(
                                           isDense: true,
-                                          contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                                          hintText: '0.00',
+                                          contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                                          border: OutlineInputBorder(),
+                                        ),
+                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                        onChanged: (v) {
+                                          item['sale_rate'] = double.tryParse(v) ?? 0;
+                                          setState(() {});
+                                        },
+                                      ),
+                                    )
+                                  : Text(
+                                      () {
+                                        final sr = _parseDouble(item['sale_rate']);
+                                        return sr > 0 ? CurrencyService.format(sr) : '-';
+                                      }(),
+                                    ),
+                            ),
+                            DataCell(
+                              () {
+                                final rawExpiry = item['expiry_date']?.toString();
+                                final hasExpiry = rawExpiry != null && rawExpiry.isNotEmpty && rawExpiry != 'null';
+                                final displayDate = hasExpiry
+                                    ? (() {
+                                        try {
+                                          final parsed = DateTime.parse(rawExpiry.split('T').first);
+                                          return DateFormat('dd-MMM-yyyy').format(parsed);
+                                        } catch (_) {
+                                          return rawExpiry.split('T').first;
+                                        }
+                                      })()
+                                    : '-';
+
+                                if (!isEditable) {
+                                  return Text(displayDate);
+                                }
+
+                                return InkWell(
+                                  borderRadius: BorderRadius.circular(4),
+                                  onTap: () async {
+                                    DateTime initial = DateTime.now();
+                                    if (hasExpiry) {
+                                      try {
+                                        initial = DateTime.parse(rawExpiry.split('T').first);
+                                      } catch (_) {}
+                                    }
+                                    final picked = await showDatePicker(
+                                      context: context,
+                                      initialDate: initial,
+                                      firstDate: DateTime(2000),
+                                      lastDate: DateTime(2100),
+                                    );
+                                    if (picked != null) {
+                                      setState(() {
+                                        item['expiry_date'] = DateFormat('yyyy-MM-dd').format(picked);
+                                      });
+                                    }
+                                  },
+                                  child: Container(
+                                    height: 36,
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      border: Border.all(color: Colors.grey.shade400),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.calendar_today, size: 12, color: Colors.grey.shade600),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          hasExpiry ? displayDate : 'Set Date',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: hasExpiry ? Colors.black87 : Colors.grey.shade500,
+                                          ),
+                                        ),
+                                        if (hasExpiry) ...[
+                                          const SizedBox(width: 2),
+                                          InkWell(
+                                            onTap: () {
+                                              setState(() {
+                                                item['expiry_date'] = null;
+                                              });
+                                            },
+                                            child: const Icon(Icons.close, size: 12, color: Colors.red),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }(),
+                            ),
+                            DataCell(
+                              isEditable
+                                  ? SizedBox(
+                                      width: 70,
+                                      height: 36,
+                                      child: TextFormField(
+                                        key: ValueKey('grn-tax-$selectedGrnId-$i-${item['id']}'),
+                                        initialValue: tax.toString(),
+                                        textAlign: TextAlign.center,
+                                        textAlignVertical: TextAlignVertical.center,
+                                        style: const TextStyle(fontSize: 12),
+                                        decoration: const InputDecoration(
+                                          isDense: true,
+                                          contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                                           border: OutlineInputBorder(),
                                         ),
                                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -1239,13 +1364,15 @@ class _ModifyReceivingScreenState extends State<ModifyReceivingScreen> {
                               isEditable
                                   ? SizedBox(
                                       width: 130,
+                                      height: 36,
                                       child: TextFormField(
                                         key: ValueKey('grn-remarks-$selectedGrnId-$i-${item['id']}'),
                                         initialValue: (item['remarks'] ?? '').toString(),
+                                        textAlignVertical: TextAlignVertical.center,
                                         style: const TextStyle(fontSize: 12),
                                         decoration: const InputDecoration(
                                           isDense: true,
-                                          contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                                          contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                                           border: OutlineInputBorder(),
                                         ),
                                         onChanged: (v) {

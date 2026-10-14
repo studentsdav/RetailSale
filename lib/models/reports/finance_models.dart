@@ -748,3 +748,91 @@ class ExpenseAnalyticsModel {
     );
   }
 }
+
+class CustomerLedgerEntry {
+  final DateTime date;
+  final String voucherType;
+  final String voucherNo;
+  final String description;
+  final String paymentMode;
+  final double debit;
+  final double credit;
+  final double balance;
+  final String notes;
+
+  const CustomerLedgerEntry({
+    required this.date,
+    required this.voucherType,
+    required this.voucherNo,
+    required this.description,
+    required this.paymentMode,
+    required this.debit,
+    required this.credit,
+    required this.balance,
+    required this.notes,
+  });
+
+  factory CustomerLedgerEntry.fromJson(Map<String, dynamic> json) {
+    double numVal(dynamic v) => double.tryParse((v ?? 0).toString()) ?? 0;
+    final rawDate = json['date'] ?? json['txn_date'];
+    return CustomerLedgerEntry(
+      date: _parseApiDate(rawDate),
+      voucherType: (json['voucher_type'] ?? '').toString(),
+      voucherNo: (json['voucher_no'] ?? json['reference_no'] ?? '').toString(),
+      description: (json['description'] ?? json['particulars'] ?? '').toString(),
+      paymentMode: (json['payment_mode'] ?? '').toString(),
+      debit: numVal(json['debit']),
+      credit: numVal(json['credit']),
+      balance: numVal(json['running_balance'] ?? json['balance']),
+      notes: (json['notes'] ?? json['note'] ?? '').toString(),
+    );
+  }
+}
+
+class CustomerLedgerReport {
+  final String customerName;
+  final String customerPhone;
+  final String customerEmail;
+  final String customerAddress;
+  final String customerGstin;
+  final double totalDebit;
+  final double totalCredit;
+  final double closingBalance;
+  final int totalTransactions;
+  final List<CustomerLedgerEntry> entries;
+
+  const CustomerLedgerReport({
+    required this.customerName,
+    required this.customerPhone,
+    required this.customerEmail,
+    required this.customerAddress,
+    required this.customerGstin,
+    required this.totalDebit,
+    required this.totalCredit,
+    required this.closingBalance,
+    required this.totalTransactions,
+    required this.entries,
+  });
+
+  factory CustomerLedgerReport.fromJson(Map<String, dynamic> json) {
+    double numVal(dynamic v) => double.tryParse((v ?? 0).toString()) ?? 0;
+    final cust = json['customer'] as Map<String, dynamic>? ?? {};
+    final summary = json['summary'] as Map<String, dynamic>? ?? {};
+    final txns = (json['transactions'] as List? ?? const [])
+        .map((e) => CustomerLedgerEntry.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+
+    return CustomerLedgerReport(
+      customerName: (cust['customer_name'] ?? '').toString(),
+      customerPhone: (cust['customer_phone'] ?? '').toString(),
+      customerEmail: (cust['customer_email'] ?? '').toString(),
+      customerAddress: (cust['customer_address'] ?? '').toString(),
+      customerGstin: (cust['customer_gstin'] ?? '').toString(),
+      totalDebit: numVal(summary['total_debit']),
+      totalCredit: numVal(summary['total_credit']),
+      closingBalance: numVal(summary['closing_balance']),
+      totalTransactions: int.tryParse((summary['total_transactions'] ?? txns.length).toString()) ?? txns.length,
+      entries: txns,
+    );
+  }
+}

@@ -43,6 +43,9 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
       if (mounted) setState(() {});
     });
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
     _fetchTableKots();
   }
 
@@ -376,58 +379,62 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
                           border: Border.all(color: Colors.grey.shade300),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFE0E7FF),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.receipt_outlined, size: 16, color: Color(0xFF3730A3)),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    tag,
-                                    style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF3730A3), fontSize: 13),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE0E7FF),
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
-                                ],
-                              ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.receipt_outlined, size: 15, color: Color(0xFF3730A3)),
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        tag,
+                                        style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF3730A3), fontSize: 13),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Text(
+                                  '$itemCount items • ${clientKots.length} KOT(s)',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black87),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '$itemCount items • ${clientKots.length} KOT(s)',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    itemNames.join(', '),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                                  ),
-                                ],
+                            if (itemNames.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                itemNames.join(', '),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green.shade700,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ],
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green.shade700,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                                icon: const Icon(Icons.point_of_sale, size: 16),
+                                label: Text('Settle $tag', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                                onPressed: () {
+                                  Navigator.pop(dialogContext);
+                                  _proceedToBilling(specificClientTag: tag);
+                                },
                               ),
-                              icon: const Icon(Icons.point_of_sale, size: 16),
-                              label: Text('Settle $tag', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                              onPressed: () {
-                                Navigator.pop(dialogContext);
-                                _proceedToBilling(specificClientTag: tag);
-                              },
                             ),
                           ],
                         ),
@@ -1263,7 +1270,7 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
           ],
         ),
       ),
-      floatingActionButton: isMobile
+      floatingActionButton: (isMobile && _tabController.index == 0)
           ? FloatingActionButton.extended(
               backgroundColor: const Color(0xFFFF7A1A),
               foregroundColor: Colors.white,
@@ -1660,6 +1667,7 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
     }
 
     final keys = summary.keys.toList();
+    final bool isMobile = MediaQuery.of(context).size.width < 900;
 
     return Card(
       margin: const EdgeInsets.all(16),
@@ -1677,29 +1685,32 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
             Container(
               color: Colors.grey.shade100,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: [
-                  const Text('Filter by Client Bill:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 8),
-                  ChoiceChip(
-                    label: const Text('All Bills', style: TextStyle(fontSize: 11)),
-                    selected: _selectedConsolidatedBillTag == 'ALL',
-                    onSelected: (val) {
-                      if (val) setState(() => _selectedConsolidatedBillTag = 'ALL');
-                    },
-                  ),
-                  const SizedBox(width: 6),
-                  ...distinctTags.map((tag) => Padding(
-                    padding: const EdgeInsets.only(right: 6.0),
-                    child: ChoiceChip(
-                      label: Text(tag, style: const TextStyle(fontSize: 11)),
-                      selected: _selectedConsolidatedBillTag == tag,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    const Text('Filter by Client Bill:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: const Text('All Bills', style: TextStyle(fontSize: 11)),
+                      selected: _selectedConsolidatedBillTag == 'ALL',
                       onSelected: (val) {
-                        if (val) setState(() => _selectedConsolidatedBillTag = tag);
+                        if (val) setState(() => _selectedConsolidatedBillTag = 'ALL');
                       },
                     ),
-                  )),
-                ],
+                    const SizedBox(width: 6),
+                    ...distinctTags.map((tag) => Padding(
+                      padding: const EdgeInsets.only(right: 6.0),
+                      child: ChoiceChip(
+                        label: Text(tag, style: const TextStyle(fontSize: 11)),
+                        selected: _selectedConsolidatedBillTag == tag,
+                        onSelected: (val) {
+                          if (val) setState(() => _selectedConsolidatedBillTag = tag);
+                        },
+                      ),
+                    )),
+                  ],
+                ),
               ),
             ),
           Container(
@@ -1774,29 +1785,58 @@ class _RunningOrdersScreenState extends State<RunningOrdersScreen> with SingleTi
             ),
           ),
           if (keys.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green.shade700,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              decoration: BoxDecoration(
+                color: scheme.surface,
+                border: Border(top: BorderSide(color: scheme.outlineVariant.withOpacity(0.5))),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Row(
+                  children: [
+                    if (isMobile) ...[
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFF7A1A),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        icon: const Icon(Icons.add_shopping_cart, size: 18),
+                        label: const Text('Add Order', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        onPressed: _openFreshOrderPrompt,
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green.shade700,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        icon: const Icon(Icons.point_of_sale, size: 18),
+                        label: Text(
+                          _selectedConsolidatedBillTag == 'ALL'
+                              ? 'Proceed to Bill'
+                              : 'Bill $_selectedConsolidatedBillTag',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onPressed: () {
+                          if (_selectedConsolidatedBillTag == 'ALL') {
+                            _proceedToBilling();
+                          } else {
+                            _proceedToBilling(specificClientTag: _selectedConsolidatedBillTag);
+                          }
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-                icon: const Icon(Icons.point_of_sale, size: 18),
-                label: Text(
-                  _selectedConsolidatedBillTag == 'ALL'
-                      ? 'Proceed to Bill Whole Table'
-                      : 'Proceed to Bill $_selectedConsolidatedBillTag',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                ),
-                onPressed: () {
-                  if (_selectedConsolidatedBillTag == 'ALL') {
-                    _proceedToBilling();
-                  } else {
-                    _proceedToBilling(specificClientTag: _selectedConsolidatedBillTag);
-                  }
-                },
               ),
             ),
         ],

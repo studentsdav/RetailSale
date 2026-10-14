@@ -2497,9 +2497,53 @@ exports.getCreditReport = async (req, res) => {
             customer.advances = Array.isArray(customer.advances) ? customer.advances : [];
         }
 
-        const resultCustomers = Array.from(customers.values()).filter(
-            (c) => c.total_outstanding > 0.009 || c.total_advance > 0.009
-        );
+        const includeAll = String(req.query.include_all || req.query.includeAll || '').toLowerCase() === 'true';
+        if (includeAll && req.propertyDb.models.customers) {
+            const customerWhere: any = {
+                ...scope.outletWhere
+            };
+            const searchVal = String(req.query.customer || req.query.search || '').trim();
+            if (searchVal) {
+                customerWhere[Op.or] = [
+                    { customer_name: { [Op.iLike]: `%${searchVal}%` } },
+                    { customer_phone: { [Op.iLike]: `%${searchVal}%` } }
+                ];
+            }
+            const allSavedCustomers = await req.propertyDb.models.customers.findAll({
+                where: customerWhere,
+                order: [['customer_name', 'ASC']],
+                bypassOutletFilter: true
+            });
+            for (const c of allSavedCustomers) {
+                const key = buildCustomerKey(c);
+                if (!customers.has(key)) {
+                    customers.set(key, {
+                        customer_name: getCustomerLabel(c),
+                        customer_phone: c.customer_phone || '',
+                        customer_gstin: c.customer_gstin || '',
+                        customer_address: c.customer_address || '',
+                        total_outstanding: 0,
+                        total_advance: 0,
+                        bills: [],
+                        advances: []
+                    });
+                } else {
+                    const existing = customers.get(key);
+                    if (!existing.customer_address && c.customer_address) {
+                        existing.customer_address = c.customer_address;
+                    }
+                    if (!existing.customer_gstin && c.customer_gstin) {
+                        existing.customer_gstin = c.customer_gstin;
+                    }
+                }
+            }
+        }
+
+        const resultCustomers = includeAll
+            ? Array.from(customers.values())
+            : Array.from(customers.values()).filter(
+                (c) => c.total_outstanding > 0.009 || c.total_advance > 0.009
+            );
 
         res.json({
             success: true,
@@ -2510,6 +2554,208 @@ exports.getCreditReport = async (req, res) => {
                 total_advance: roundAmount(resultCustomers.reduce((sum, c) => sum + c.total_advance, 0))
             },
             data: resultCustomers
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.getCustomerLedger = async (req, res) => {
+    try {
+        const reqOutlet = req.query.outlet_id || req.query.outletId;
+        const scope = await resolveOutletScope(req, reqOutlet);
+        const customerPhone = String(req.query.customer_phone || req.query.phone || '').trim();
+        const customerName = String(req.query.customer_name || req.query.name || '').trim();
+        const search = String(req.query.customer || req.query.search || customerPhone || customerName).trim();
+
+        if (!search) {
+            return res.status(400).json({ success: false, error: 'Customer phone or name is required' });
+        }
+
+        const customerMatch = buildCustomerMatch(search);
+        let customerProfile = null;
+        if (req.propertyDb.models.customers) {
+            customerProfile = await req.propertyDb.models.customers.findOne({
+                where: {
+                    ...scope.outletWhere,
+                    ...(customerMatch || {})
+                },
+                bypassOutletFilter: true
+            });
+        }
+
+        const salesWhere: any = {
+            status: 'COMPLETED',
+            is_latest: true,
+            is_deleted: false,
+            sale_no: { [Op.notILike]: 'DRAFT-%' },
+            ...scope.outletWhere,
+            ...(customerMatch || {})
+        };
+
+        const sales = await req.propertyDb.models.sales_headers.findAll({
+            where: salesWhere,
+            include: [{ model: req.propertyDb.models.customer_repayments, as: 'repayments', required: false }],
+            order: [['sale_date', 'ASC'], ['id', 'ASC']],
+            bypassOutletFilter: true
+        });
+
+        const advanceWhere: any = {
+            ...scope.outletWhere,
+            ...(customerMatch || {})
+        };
+
+        const advances = await req.propertyDb.models.customer_advances.findAll({
+            where: advanceWhere,
+            order: [['advance_date', 'ASC'], ['id', 'ASC']],
+            bypassOutletFilter: true
+        });
+
+        const rawTransactions = [];
+
+        for (const sale of sales) {
+            const netAmount = toAmount(sale.net_amount);
+            rawTransactions.push({
+                date: sale.sale_date,
+                sort_time: sale.created_at || sale.sale_date,
+                id: `sale-${sale.id}`,
+                voucher_type: 'SALE_INVOICE',
+                voucher_no: sale.sale_no,
+                description: `Invoice #${sale.sale_no} (${sale.order_type || 'Sale'})`,
+                payment_mode: sale.payment_mode || 'CREDIT',
+                debit: netAmount,
+                credit: 0,
+                notes: `Mode: ${sale.payment_mode || 'CREDIT'}`
+            });
+
+            const repaymentTotal = (sale.repayments || []).reduce((sum, p) => sum + toAmount(p.amount), 0);
+            const parsedInitial = extractInitialPaid(sale);
+            const initialPaid = parsedInitial !== null
+                ? parsedInitial
+                : Math.max(0, toAmount(sale.amount_paid) - repaymentTotal);
+
+            if (initialPaid > 0.009) {
+                rawTransactions.push({
+                    date: sale.sale_date,
+                    sort_time: sale.created_at || sale.sale_date,
+                    id: `pay-${sale.id}`,
+                    voucher_type: 'POS_PAYMENT',
+                    voucher_no: sale.sale_no,
+                    description: `POS Payment on #${sale.sale_no}`,
+                    payment_mode: sale.payment_mode || 'CASH',
+                    debit: 0,
+                    credit: toAmount(initialPaid),
+                    notes: 'Paid at checkout'
+                });
+            }
+
+            for (const p of (sale.repayments || [])) {
+                const isAdvanceAdjust = String(p.payment_mode || '').toUpperCase() === 'ADVANCE';
+                rawTransactions.push({
+                    date: p.payment_date,
+                    sort_time: p.created_at || p.payment_date,
+                    id: `repay-${p.id}`,
+                    voucher_type: isAdvanceAdjust ? 'ADVANCE_ADJUSTED' : 'REPAYMENT',
+                    voucher_no: p.reference_no || `REC-${p.id}`,
+                    description: isAdvanceAdjust
+                        ? `Advance Adjusted against #${sale.sale_no}`
+                        : `Repayment for #${sale.sale_no}`,
+                    payment_mode: p.payment_mode || 'CASH',
+                    debit: 0,
+                    credit: isAdvanceAdjust ? 0 : toAmount(p.amount),
+                    notes: isAdvanceAdjust
+                        ? (p.note || 'Settled from Advance')
+                        : (p.note || 'Repayment received')
+                });
+            }
+        }
+
+        for (const adv of advances) {
+            rawTransactions.push({
+                date: adv.advance_date,
+                sort_time: adv.created_at || adv.advance_date,
+                id: `adv-${adv.id}`,
+                voucher_type: 'ADVANCE_DEPOSIT',
+                voucher_no: adv.reference_no || `ADV-${adv.id}`,
+                description: 'Advance Deposit Received',
+                payment_mode: adv.payment_mode || 'CASH',
+                debit: 0,
+                credit: toAmount(adv.original_amount),
+                notes: adv.note || 'Customer Advance'
+            });
+
+            if (adv.note && /Refunded\s+Rs\.\s*([0-9.]+)/i.test(adv.note)) {
+                const match = /Refunded\s+Rs\.\s*([0-9.]+)/i.exec(adv.note);
+                if (match && Number(match[1]) > 0) {
+                    const refundAmt = Number(match[1]);
+                    rawTransactions.push({
+                        date: adv.updated_at || adv.advance_date,
+                        sort_time: adv.updated_at || adv.advance_date,
+                        id: `adv-ref-${adv.id}`,
+                        voucher_type: 'ADVANCE_REFUND',
+                        voucher_no: adv.reference_no || `REF-${adv.id}`,
+                        description: 'Advance Refund to Customer',
+                        payment_mode: 'CASH',
+                        debit: refundAmt,
+                        credit: 0,
+                        notes: `Refunded from Advance #${adv.id}`
+                    });
+                }
+            }
+        }
+
+        rawTransactions.sort((a, b) => {
+            const dA = new Date(a.sort_time || a.date).getTime();
+            const dB = new Date(b.sort_time || b.date).getTime();
+            if (dA !== dB) return dA - dB;
+            if (a.debit > 0 && b.credit === 0) return -1;
+            if (a.credit > 0 && b.debit === 0) return 1;
+            return 0;
+        });
+
+        let runningBalance = 0;
+        let totalDebit = 0;
+        let totalCredit = 0;
+
+        const transactions = rawTransactions.map((tx) => {
+            totalDebit = roundAmount(totalDebit + tx.debit);
+            totalCredit = roundAmount(totalCredit + tx.credit);
+            runningBalance = roundAmount(runningBalance + tx.debit - tx.credit);
+            return {
+                date: tx.date,
+                voucher_type: tx.voucher_type,
+                voucher_no: tx.voucher_no,
+                description: tx.description,
+                payment_mode: tx.payment_mode,
+                debit: tx.debit,
+                credit: tx.credit,
+                running_balance: runningBalance,
+                notes: tx.notes
+            };
+        });
+
+        const custName = customerProfile?.customer_name || sales[0]?.customer_name || advances[0]?.customer_name || search;
+        const custPhone = customerProfile?.customer_phone || sales[0]?.customer_phone || advances[0]?.customer_phone || customerPhone;
+        const custEmail = customerProfile?.customer_email || '';
+        const custAddress = customerProfile?.customer_address || sales[0]?.customer_address || '';
+        const custGstin = customerProfile?.customer_gstin || sales[0]?.customer_gstin || advances[0]?.customer_gstin || '';
+
+        res.json({
+            success: true,
+            customer: {
+                customer_name: custName,
+                customer_phone: custPhone,
+                customer_email: custEmail,
+                customer_address: custAddress,
+                customer_gstin: custGstin
+            },
+            summary: {
+                total_debit: totalDebit,
+                total_credit: totalCredit,
+                closing_balance: runningBalance,
+                total_transactions: transactions.length
+            },
+            transactions
         });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });

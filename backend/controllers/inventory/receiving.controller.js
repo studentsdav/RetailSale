@@ -130,6 +130,7 @@ exports.createReceiving = async (req, res) => {
                 tax_amount: taxAmount,
                 total_after_tax: amount + taxAmount,
                 department: i.department || null,
+                sale_rate: i.sale_rate !== undefined && i.sale_rate !== null ? Number(i.sale_rate) : null,
                 expiry_date: i.expiry_date,
                 remarks: i.remarks || null
             }, { transaction: t });
@@ -438,11 +439,15 @@ exports.modifyReceiving = async (req, res) => {
             const diffQty = i.qty - oldQty;
 
             const taxRate = Number(i.tax ?? item.tax ?? 0);
+            const saleRate = i.sale_rate !== undefined && i.sale_rate !== null ? Number(i.sale_rate) : null;
+            const expiryDate = i.expiry_date !== undefined ? (i.expiry_date ? String(i.expiry_date).split('T')[0] : null) : item.expiry_date;
 
             /// UPDATE ITEM
             await item.update({
                 qty: i.qty,
                 rate: i.rate,
+                sale_rate: saleRate,
+                expiry_date: expiryDate,
                 tax: taxRate,
                 amount: i.qty * i.rate,
                 gst_amount: (i.qty * i.rate) * taxRate / 100,
@@ -455,6 +460,7 @@ exports.modifyReceiving = async (req, res) => {
                 req,
                 itemCode: item.item_code,
                 purchaseRate: i.rate,
+                saleRate: saleRate !== null ? saleRate : undefined,
                 transaction: t
             });
 
@@ -660,9 +666,34 @@ exports.getReceivingDetails = async (req, res) => {
             });
         }
 
+        const grnJson = grn.toJSON();
+        if (Array.isArray(grnJson.items) && grnJson.items.length > 0) {
+            const itemCodes = grnJson.items.map((it) => it.item_code).filter(Boolean);
+            const masterItems = await req.propertyDb.models.item_master.findAll({
+                where: {
+                    outlet_id,
+                    item_code: itemCodes
+                },
+                attributes: ['item_code', 'retail_sale_price']
+            });
+            const priceMap = new Map();
+            masterItems.forEach((m) => {
+                priceMap.set(String(m.item_code), Number(m.retail_sale_price) || 0);
+            });
+
+            grnJson.items = grnJson.items.map((it) => {
+                const currentSaleRate = it.sale_rate !== null && it.sale_rate !== undefined ? Number(it.sale_rate) : null;
+                const fallbackRate = priceMap.get(String(it.item_code)) ?? 0;
+                return {
+                    ...it,
+                    sale_rate: (currentSaleRate !== null && currentSaleRate > 0) ? currentSaleRate : fallbackRate
+                };
+            });
+        }
+
         res.json({
             success: true,
-            data: grn
+            data: grnJson
         });
 
     } catch (err) {

@@ -1061,6 +1061,8 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
                       headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
                       columnSpacing: 28,
                       horizontalMargin: 14,
+                      dataRowMinHeight: 52,
+                      dataRowMaxHeight: 52,
                       headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFF475569)),
                       dataTextStyle: const TextStyle(fontSize: 12),
                       columns: [
@@ -1106,13 +1108,16 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
                               isEditable
                                   ? SizedBox(
                                       width: 70,
+                                      height: 36,
                                       child: TextFormField(
                                         key: ValueKey('issue-qty-$selectedIssueId-$i-${item['id']}'),
                                         initialValue: qty.toString(),
+                                        textAlign: TextAlign.center,
+                                        textAlignVertical: TextAlignVertical.center,
                                         style: const TextStyle(fontSize: 12),
                                         decoration: const InputDecoration(
                                           isDense: true,
-                                          contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                                          contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                                           border: OutlineInputBorder(),
                                         ),
                                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -1128,13 +1133,16 @@ class _IssueModifyScreenState extends State<IssueModifyScreen> {
                               isEditable
                                   ? SizedBox(
                                       width: 80,
+                                      height: 36,
                                       child: TextFormField(
                                         key: ValueKey('issue-rate-$selectedIssueId-$i-${item['id']}'),
                                         initialValue: rate.toString(),
+                                        textAlign: TextAlign.center,
+                                        textAlignVertical: TextAlignVertical.center,
                                         style: const TextStyle(fontSize: 12),
                                         decoration: const InputDecoration(
                                           isDense: true,
-                                          contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                                          contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                                           border: OutlineInputBorder(),
                                         ),
                                         keyboardType: const TextInputType.numberWithOptions(decimal: true),

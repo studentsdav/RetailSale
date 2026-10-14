@@ -594,17 +594,40 @@ exports.pinLogin = async (req: any, res: any) => {
                 }
             });
 
+            const matchingUsers = [];
             for (const u of users) {
                 if (u.pin_code === cleanPin) {
-                    user = u;
-                    break;
+                    matchingUsers.push(u);
+                } else if (u.pin_code) {
+                    try {
+                        if (await bcrypt.compare(cleanPin, u.pin_code)) {
+                            matchingUsers.push(u);
+                        }
+                    } catch (_) {}
                 }
-                try {
-                    if (u.pin_code && await bcrypt.compare(cleanPin, u.pin_code)) {
-                        user = u;
-                        break;
-                    }
-                } catch (_) {}
+            }
+
+            if (matchingUsers.length === 0) {
+                return res.status(401).json({ success: false, message: "Invalid PIN or user not found for this outlet." });
+            }
+
+            if (matchingUsers.length > 1) {
+                let roleMatches = matchingUsers;
+                if (role && role.toString().trim()) {
+                    const reqRole = role.toString().trim().toUpperCase();
+                    roleMatches = matchingUsers.filter(u => (u.role || "").toString().toUpperCase() === reqRole);
+                }
+                if (roleMatches.length === 1) {
+                    user = roleMatches[0];
+                } else {
+                    const userNames = matchingUsers.map(u => u.full_name || u.username).join(", ");
+                    return res.status(409).json({
+                        success: false,
+                        message: "Security Conflict: Multiple active users (" + userNames + ") share the same PIN code '" + cleanPin + "'. Please enter your username along with your PIN, or assign unique PINs in User Management."
+                    });
+                }
+            } else {
+                user = matchingUsers[0];
             }
         }
 

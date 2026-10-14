@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:retailpos/screens/splash_screen.dart';
 
@@ -132,6 +134,32 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
     }
   }
 
+  bool get _shouldShowCloudMigration {
+    // Hide on mobile platforms (Android & iOS)
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      return false;
+    }
+
+    // Only show on desktop operating systems (Windows, Linux, macOS)
+    final isDesktop = !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
+    if (!isDesktop) return false;
+
+    // Do not show when launched for companion/client apps (customer app, waiter app, rider app, retailer app, supplier app)
+    if (widget.nextScreen != null) {
+      final target = widget.nextScreen.runtimeType.toString().toLowerCase();
+      if (target.contains('customer') ||
+          target.contains('rider') ||
+          target.contains('waiter') ||
+          target.contains('retailer') ||
+          target.contains('supplier') ||
+          target.contains('captain')) {
+        return false;
+      }
+    }
+
+    return AppConfig.isLocalServer;
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool canProceed = _urlCtrl.text.trim().isNotEmpty && !_isLoading;
@@ -150,7 +178,7 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.06),
+                  color: Colors.black.withValues(alpha: 0.06),
                   blurRadius: 16,
                   offset: const Offset(0, 4),
                 )
@@ -241,7 +269,7 @@ class _ServerConfigScreenState extends State<ServerConfigScreen> {
                           ),
                   ),
                 ),
-                if (AppConfig.isLocalServer) ...[
+                if (_shouldShowCloudMigration) ...[
                   const SizedBox(height: 24),
                   const Divider(),
                   const SizedBox(height: 16),

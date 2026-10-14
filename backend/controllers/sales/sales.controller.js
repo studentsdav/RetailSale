@@ -4960,6 +4960,24 @@ exports.updateSalePaymentMode = async (req, res) => {
             transaction: t
         });
 
+        if (balanceDue <= 0.009) {
+            const oldRepayments = await req.propertyDb.models.customer_repayments.findAll({
+                where: { sale_id: sale.id },
+                transaction: t
+            });
+            for (const rep of oldRepayments) {
+                await req.propertyDb.models.cash_ledger.destroy({
+                    where: {
+                        outlet_id: req.user.outlet_id,
+                        reference_type: { [Op.in]: ['REPAYMENT', 'WAIVE_OFF'] },
+                        reference_id: String(rep.id)
+                    },
+                    transaction: t
+                });
+                await rep.destroy({ transaction: t });
+            }
+        }
+
         for (const row of nonCreditLines) {
             if (row.amount <= 0) continue;
             let lineTxnType = 'SALE_CASH';
@@ -5773,7 +5791,40 @@ exports.getSaleDetails = async (req, res) => {
             };
         });
         saleJson.credit_notes = creditNotes;
-        saleJson.payment_lines = decodePaymentReferenceLines(saleJson.payment_reference);
+        let effectivePaymentLines = decodePaymentReferenceLines(saleJson.payment_reference);
+        const repaymentsList = Array.isArray(sale.repayments) ? sale.repayments : [];
+        if (repaymentsList.length > 0) {
+            const initialLines = effectivePaymentLines.filter(l => l.method !== 'CREDIT');
+            const repaymentLines = repaymentsList
+                .filter(r => Number(r.amount) > 0)
+                .map(r => ({
+                    method: String(r.payment_mode || 'CASH').trim().toUpperCase(),
+                    amount: toAmount(r.amount)
+                }));
+            const mTotals = new Map();
+            for (const line of [...initialLines, ...repaymentLines]) {
+                mTotals.set(line.method, toAmount((mTotals.get(line.method) || 0) + line.amount));
+            }
+            const updatedLines = [];
+            for (const [m, a] of mTotals.entries()) {
+                if (a > 0.009) updatedLines.push({ method: m, amount: a });
+            }
+            const curBalDue = toAmount(saleJson.balance_due);
+            if (curBalDue > 0.009) {
+                updatedLines.push({ method: 'CREDIT', amount: curBalDue });
+            }
+            if (updatedLines.length > 0) {
+                effectivePaymentLines = updatedLines;
+                saleJson.payment_reference = `POSPAY:${JSON.stringify(updatedLines)}`;
+                if (curBalDue > 0.009) {
+                    saleJson.payment_mode = (toAmount(saleJson.amount_paid) > 0.009) ? 'SPLIT' : 'CREDIT';
+                } else {
+                    const nonCredit = updatedLines.filter(l => l.method !== 'CREDIT');
+                    saleJson.payment_mode = nonCredit.length === 1 ? nonCredit[0].method : 'SPLIT';
+                }
+            }
+        }
+        saleJson.payment_lines = effectivePaymentLines;
 
         // Load all refunds for this sale
         const refunds = await req.propertyDb.models.sales_refunds.findAll({

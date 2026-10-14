@@ -599,42 +599,110 @@ exports.getSalesReport = async (req, res) => {
                 let cashAmount = 0;
                 let cardAmount = 0;
                 let upiAmount = 0;
+                let creditAmount = 0;
                 let otherAmount = 0;
                 let advanceAmount = 0;
                 let advanceAdjustmentAmount = 0;
 
+                const repayments = Array.isArray(sale.repayments) ? sale.repayments : [];
+                const methodMap = {};
                 const ref = String(sale.payment_reference || '').trim();
+                let hasPosPay = false;
+
                 if (ref.startsWith('POSPAY:')) {
                     try {
                         const lines = JSON.parse(ref.substring(7));
                         if (Array.isArray(lines)) {
+                            hasPosPay = true;
                             for (const line of lines) {
                                 const method = String(line.method || '').toUpperCase();
                                 const amt = toNumber(line.amount);
-                                if (method === 'CASH') cashAmount += amt;
-                                else if (method === 'CARD') cardAmount += amt;
-                                else if (method === 'UPI') upiAmount += amt;
-                                else if (method === 'ADVANCE_ADDED' || method === 'ADVANCE_DEPOSIT') advanceAmount += amt;
-                                else if (method === 'ADVANCE' || method === 'ADVANCE_ADJUSTMENT' || method === 'ADVANCE_APPLY' || method === 'SUBSCRIPTION') advanceAdjustmentAmount += amt;
-                                else otherAmount += amt;
+                                if (amt > 0) {
+                                    methodMap[method] = roundAmount((methodMap[method] || 0) + amt);
+                                }
                             }
                         }
                     } catch (_) {}
                 }
 
+                if (repayments.length > 0) {
+                    const actualBalDue = Math.max(0, toNumber(sale.balance_due));
+                    const recordedCredit = methodMap['CREDIT'] || 0;
+
+                    if (recordedCredit > actualBalDue + 0.009 || (!hasPosPay && String(sale.payment_mode).toUpperCase() === 'CREDIT')) {
+                        delete methodMap['CREDIT'];
+                        for (const rep of repayments) {
+                            const rAmt = toNumber(rep.amount);
+                            if (rAmt > 0) {
+                                const rMode = String(rep.payment_mode || 'CASH').toUpperCase();
+                                methodMap[rMode] = roundAmount((methodMap[rMode] || 0) + rAmt);
+                            }
+                        }
+                        if (actualBalDue > 0.009) {
+                            methodMap['CREDIT'] = actualBalDue;
+                        }
+                    } else if (!methodMap['CREDIT'] && actualBalDue > 0.009) {
+                        methodMap['CREDIT'] = actualBalDue;
+                    }
+                }
+
+                if (Object.keys(methodMap).length > 0) {
+                    for (const [method, amt] of Object.entries(methodMap)) {
+                        if (method === 'CASH') cashAmount += amt;
+                        else if (method === 'CARD') cardAmount += amt;
+                        else if (method === 'UPI') upiAmount += amt;
+                        else if (method === 'CREDIT') creditAmount += amt;
+                        else if (method === 'ADVANCE_ADDED' || method === 'ADVANCE_DEPOSIT') advanceAmount += amt;
+                        else if (method === 'ADVANCE' || method === 'ADVANCE_ADJUSTMENT' || method === 'ADVANCE_APPLY' || method === 'SUBSCRIPTION') advanceAdjustmentAmount += amt;
+                        else otherAmount += amt;
+                    }
+                }
+
                 if (subscriptionNet > 0 && advanceAdjustmentAmount === 0) {
                     advanceAdjustmentAmount = subscriptionNet;
                 }
-                const totalParsed = cashAmount + cardAmount + upiAmount + otherAmount + advanceAmount + advanceAdjustmentAmount;
+                const totalParsed = cashAmount + cardAmount + upiAmount + creditAmount + otherAmount + advanceAmount + advanceAdjustmentAmount;
                 if (totalParsed === 0 && saleNetRevenue > 0) {
                     const nonSubNetRevenue = Math.max(saleNetRevenue - subscriptionNet, 0);
-                    const mode = String(effectivePaymentMode || 'CASH').toUpperCase();
-                    if (mode === 'CASH') cashAmount = nonSubNetRevenue;
+                    const balDue = toNumber(sale.balance_due);
+                    const mode = String(sale.payment_mode || 'CASH').toUpperCase();
+                    if (mode === 'CREDIT' || balDue >= nonSubNetRevenue - 0.01) {
+                        creditAmount = balDue > 0 ? balDue : nonSubNetRevenue;
+                    } else if (mode === 'CASH') cashAmount = nonSubNetRevenue;
                     else if (mode === 'CARD') cardAmount = nonSubNetRevenue;
                     else if (mode === 'UPI') upiAmount = nonSubNetRevenue;
                     else if (mode === 'ADVANCE' || mode === 'ADVANCE_ADJUSTMENT' || mode === 'SUBSCRIPTION') advanceAdjustmentAmount = saleNetRevenue;
                     else if (mode === 'ADVANCE_ADDED') advanceAmount = nonSubNetRevenue;
                     else otherAmount = nonSubNetRevenue;
+                }
+
+                const effectiveLines = [];
+                if (cashAmount > 0.009) effectiveLines.push({ method: 'CASH', amount: roundAmount(cashAmount) });
+                if (cardAmount > 0.009) effectiveLines.push({ method: 'CARD', amount: roundAmount(cardAmount) });
+                if (upiAmount > 0.009) effectiveLines.push({ method: 'UPI', amount: roundAmount(upiAmount) });
+                if (creditAmount > 0.009) effectiveLines.push({ method: 'CREDIT', amount: roundAmount(creditAmount) });
+                if (otherAmount > 0.009) effectiveLines.push({ method: 'OTHER', amount: roundAmount(otherAmount) });
+                if (advanceAmount > 0.009) effectiveLines.push({ method: 'ADVANCE_DEPOSIT', amount: roundAmount(advanceAmount) });
+                if (advanceAdjustmentAmount > 0.009) effectiveLines.push({ method: 'ADVANCE_ADJUSTMENT', amount: roundAmount(advanceAdjustmentAmount) });
+
+                let effectivePaymentReference = sale.payment_reference;
+                if (effectiveLines.length > 0) {
+                    effectivePaymentReference = `POSPAY:${JSON.stringify(effectiveLines)}`;
+                }
+
+                if (creditAmount > 0.009) {
+                    if (effectiveLines.length > 1) {
+                        effectivePaymentMode = 'SPLIT';
+                    } else {
+                        effectivePaymentMode = 'CREDIT';
+                    }
+                } else {
+                    const nonCreditLines = effectiveLines.filter(l => l.method !== 'CREDIT');
+                    if (nonCreditLines.length === 1) {
+                        effectivePaymentMode = nonCreditLines[0].method;
+                    } else if (nonCreditLines.length > 1) {
+                        effectivePaymentMode = 'SPLIT';
+                    }
                 }
 
                 // Accumulate accurate payment mode breakdown from actual split breakdown:
@@ -645,6 +713,7 @@ exports.getSalesReport = async (req, res) => {
                 if (cashAmount > 0.009) paymentSplits.push({ mode: 'CASH', amount: cashAmount });
                 if (cardAmount > 0.009) paymentSplits.push({ mode: 'CARD', amount: cardAmount });
                 if (upiAmount > 0.009) paymentSplits.push({ mode: 'UPI', amount: upiAmount });
+                if (creditAmount > 0.009) paymentSplits.push({ mode: 'CREDIT', amount: creditAmount });
                 if (otherAmount > 0.009) paymentSplits.push({ mode: 'OTHER', amount: otherAmount });
                 if (advanceAmount > 0.009) paymentSplits.push({ mode: 'ADVANCE DEPOSIT', amount: advanceAmount });
                 if (advanceAdjustmentAmount > 0.009) paymentSplits.push({ mode: 'ADVANCE ADJUSTED', amount: advanceAdjustmentAmount });
@@ -702,10 +771,11 @@ exports.getSalesReport = async (req, res) => {
                     customer_address: resolvedAddress || sale.customer_address,
                     customer_gstin: resolvedGstin || sale.customer_gstin,
                     payment_mode: effectivePaymentMode,
-                    payment_reference: sale.payment_reference,
+                    payment_reference: effectivePaymentReference,
                     cash_amount: roundAmount(cashAmount),
                     card_amount: roundAmount(cardAmount),
                     upi_amount: roundAmount(upiAmount),
+                    credit_amount: roundAmount(creditAmount),
                     other_amount: roundAmount(otherAmount),
                     advance_amount: roundAmount(advanceAmount),
                     advance_adjustment_amount: roundAmount(advanceAdjustmentAmount),

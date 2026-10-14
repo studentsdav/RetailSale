@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import '../core/config/date_time_service.dart';
 import '../core/currency/currency_service.dart';
-import '../core/utils/timezone_utils.dart';
 import '../core/printing/pos_invoice_printer.dart';
+import '../core/utils/timezone_utils.dart';
+import '../controllers/settings/property_info_controller.dart';
+import '../models/common/property_info_model.dart';
 import '../models/inventory/sale_order_model.dart';
 
 Future<void> showSaleBillPreviewDialog(
   BuildContext context, {
   required Map<String, dynamic> sale,
+  PropertyInfo? property,
 }) async {
   final order = SaleOrder.fromJson(sale);
   final itemCount = order.items.length;
@@ -28,10 +30,11 @@ Future<void> showSaleBillPreviewDialog(
             children: [
               Text('Customer: ${(order.customerName ?? '').trim().isEmpty ? 'Walk-in' : order.customerName!.trim()}'),
               Text('Date: ${TimeZoneUtils.formatInTimeZone(order.saleDate, DateTimeService.instance.currentTimeZone, pattern: 'dd-MMM-yyyy hh:mm a')}'),
-              Text('Status: ${order.status}'),
-              Text('Payment: ${order.paymentMode}'),
+              Text('Payment: ${order.paymentMode}${order.paymentMode.toUpperCase() == 'CREDIT' && order.balanceDue <= 0.009 ? ' (FULLY REPAID)' : (order.paymentMode.toUpperCase() == 'CREDIT' && order.amountPaid > 0.009 ? ' (PARTIALLY REPAID)' : '')}'),
               Text('Net Amount: ${CurrencyService.format(order.netAmount)}'),
-              if ((order.paymentReference ?? '').trim().isNotEmpty)
+              if (order.balanceDue > 0.009)
+                Text('Balance Due: ${CurrencyService.format(order.balanceDue)}', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
+              if ((order.paymentReference ?? '').trim().isNotEmpty && !order.paymentReference!.startsWith('POSPAY:'))
                 Text('Reference: ${order.paymentReference!.trim()}'),
               if ((order.notes ?? '').trim().isNotEmpty) ...[
                 const SizedBox(height: 8),
@@ -87,9 +90,17 @@ Future<void> showSaleBillPreviewDialog(
         FilledButton.icon(
           onPressed: () async {
             Navigator.pop(dialogContext);
+            PropertyInfo? prop = property;
+            if (prop == null) {
+              try {
+                final propCtrl = PropertyInfoController();
+                await propCtrl.load();
+                prop = propCtrl.data;
+              } catch (_) {}
+            }
             await PosInvoicePrinter.printSaleInvoice(
               order: order,
-              property: null,
+              property: prop,
             );
           },
           icon: const Icon(Icons.print_outlined),

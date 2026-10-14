@@ -1419,7 +1419,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
 
     final isUnsettledBill = _isUnsettled(saleToUse);
     if (isUnsettledBill) {
-      return '⚠️ UNSETTLED RUNNING BILL • KOT / Bill Printed • Awaiting Cashier Settlement';
+      return '⚠️ UNSETTLED RUNNING BILL • Bill Printed • Awaiting Cashier Settlement';
     }
 
     final reprintJson = Map<String, dynamic>.from(detailsToUse['details'] ?? detailsToUse);
@@ -1452,7 +1452,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
       appBar: AppBar(
-        title: const Text('Reprint / Modify Sales Bill & Running Orders', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        title: const Text('Reprint / Modify Sales Bill', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         backgroundColor: Colors.white,
         foregroundColor: const Color(0xFF0B5CAD),
         elevation: 1,
@@ -1476,7 +1476,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                   ),
                   child: Row(
                     children: [
-                      _buildTabButton('ALL', 'All Bills & Orders (${_sales.length})'),
+                      _buildTabButton('ALL', 'All Bills (${_sales.length})'),
                       _buildTabButton('RUNNING', 'Running / Unsettled', badgeCount: runningCount),
                       _buildTabButton('COMPLETED', 'Completed & Settled ($completedCount)'),
                     ],
@@ -1571,7 +1571,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                         style: const TextStyle(fontSize: 12.5),
                         decoration: InputDecoration(
                           isDense: true,
-                          hintText: 'Bill / KOT / Cust / Phone...',
+                          hintText: 'Bill / Cust / Phone...',
                           hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                           prefixIcon: const Icon(Icons.search, size: 17, color: Color(0xFF0B5CAD)),
                           suffixIcon: _searchCtrl.text.isNotEmpty
@@ -1729,7 +1729,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                           : _sales.isEmpty
                               ? Center(
                                   child: Text(_orderStatusFilter == 'RUNNING'
-                                      ? 'No open running orders awaiting settlement.'
+                                      ? 'No open running bills awaiting settlement.'
                                       : 'No bills found matching filters.'),
                                 )
                               : ListView.separated(
@@ -1752,7 +1752,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                       title: Row(
                                         children: [
                                           Text(
-                                            '${sale['sale_no'] ?? 'Order #${sale['id']}'}',
+                                            '${sale['sale_no'] ?? 'Bill #${sale['id']}'}',
                                             style: TextStyle(
                                               fontWeight: FontWeight.bold,
                                               color: isReturned ? Colors.red.shade800 : (isUnsettledOrder ? Colors.deepOrange : Colors.black87),
@@ -1816,7 +1816,7 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                           ? Center(
                               child: _loading
                                   ? const CircularProgressIndicator()
-                                  : const Text('Select an order or bill to view details and settle.'),
+                                  : const Text('Select a bill to view details and settle.'),
                             )
                           : Padding(
                               padding: const EdgeInsets.all(16),
@@ -2081,14 +2081,14 @@ class _SalesReprintModifyScreenState extends State<SalesReprintModifyScreen> {
                                           style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0B5CAD)),
                                           onPressed: _printSelected,
                                           icon: const Icon(Icons.print, size: 18),
-                                          label: const Text('Reprint Bill / KOT'),
+                                          label: const Text('Reprint Bill'),
                                         ),
                                       if (_canModifySales)
                                         FilledButton.icon(
                                           style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey),
                                           onPressed: _modifySelected,
                                           icon: const Icon(Icons.edit, size: 18),
-                                          label: const Text('Modify Order'),
+                                          label: const Text('Modify Bill'),
                                         ),
                                       if (_canModifySalesPayment && !_isUnsettled(_selectedSale))
                                         FilledButton.icon(

@@ -207,6 +207,7 @@ class SalesReport {
   final double cashAmount;
   final double cardAmount;
   final double upiAmount;
+  final double creditAmount;
   final double otherAmount;
   final double advanceAmount;
   final double advanceAdjustmentAmount;
@@ -245,6 +246,7 @@ class SalesReport {
     this.cashAmount = 0,
     this.cardAmount = 0,
     this.upiAmount = 0,
+    this.creditAmount = 0,
     this.otherAmount = 0,
     this.advanceAmount = 0,
     this.advanceAdjustmentAmount = 0,
@@ -285,6 +287,7 @@ class SalesReport {
       cashAmount: _toDouble(json['cash_amount']),
       cardAmount: _toDouble(json['card_amount']),
       upiAmount: _toDouble(json['upi_amount']),
+      creditAmount: _toDouble(json['credit_amount']),
       otherAmount: _toDouble(json['other_amount']),
       advanceAmount: _toDouble(json['advance_amount']),
       advanceAdjustmentAmount: _toDouble(json['advance_adjustment_amount']),

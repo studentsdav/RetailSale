@@ -2383,6 +2383,31 @@ class PosInvoicePrinter {
       } catch (_) {}
     }
 
+    if (order.repayments.isNotEmpty) {
+      final double balDue = order.balanceDue;
+      final int creditIdx = result.indexWhere((r) => r['method'] == 'CREDIT');
+      if (creditIdx != -1 || result.isEmpty) {
+        if (creditIdx != -1) {
+          result.removeAt(creditIdx);
+        }
+        for (final rep in order.repayments) {
+          final mode = (rep['payment_mode'] ?? rep['paymentMode'] ?? 'CASH').toString().toUpperCase().trim();
+          final amt = double.tryParse((rep['amount'] ?? 0).toString()) ?? 0.0;
+          if (amt > 0.009) {
+            final existIdx = result.indexWhere((r) => r['method'] == mode);
+            if (existIdx != -1) {
+              result[existIdx]['amount'] = (result[existIdx]['amount'] as double) + amt;
+            } else {
+              result.add({'method': mode, 'amount': amt});
+            }
+          }
+        }
+        if (balDue > 0.009) {
+          result.add({'method': 'CREDIT', 'amount': balDue});
+        }
+      }
+    }
+
     return result;
   }
 
@@ -2398,6 +2423,12 @@ class PosInvoicePrinter {
     final splits = _parseSplitPayments(order);
     if (splits.length > 1) {
       return 'SPLIT PAYMENT (${splits.length} Modes)';
+    }
+    if (splits.length == 1) {
+      final singleMode = splits[0]['method'] as String;
+      if (singleMode != 'CREDIT' && rawMode == 'CREDIT') {
+        return '$singleMode (REPAID)';
+      }
     }
     if (rawMode == 'CREDIT') {
       if (order.balanceDue <= 0.009) {
@@ -3964,9 +3995,25 @@ class PosInvoicePrinter {
         ? cfg['header_subtext'].toString().trim()
         : (property?.address ?? '');
     final rawTaxReg = (cfg['tax_reg_no']?.toString().trim() ?? '');
-    final String taxRegNo = (rawTaxReg.isNotEmpty && !rawTaxReg.toUpperCase().contains('TAX_DEFAULT'))
-        ? rawTaxReg
-        : '';
+    final bool isDummyPlaceholder = rawTaxReg.contains('P051234567Z') ||
+        rawTaxReg.contains('P051987654X') ||
+        rawTaxReg.contains('P059988776Z') ||
+        rawTaxReg.toUpperCase().contains('TAX_DEFAULT') ||
+        rawTaxReg == 'KRA PIN / VAT:' ||
+        rawTaxReg == 'KRA PIN / GSTIN:';
+
+    String resolvedTaxLine = '';
+    if (rawTaxReg.isNotEmpty && !isDummyPlaceholder) {
+      final countryLabel = _taxIdLabel(country);
+      if (rawTaxReg.startsWith('KRA PIN / VAT:') || rawTaxReg.startsWith('KRA PIN / GSTIN:')) {
+        final val = rawTaxReg.split(':').last.trim();
+        resolvedTaxLine = '$countryLabel: $val';
+      } else {
+        resolvedTaxLine = rawTaxReg;
+      }
+    } else if (property != null && property.gstNo.isNotEmpty && !property.gstNo.toUpperCase().contains('TAX_DEFAULT')) {
+      resolvedTaxLine = '${_taxIdLabel(country)}: ${property.gstNo.trim()}';
+    }
 
     final bodyStyle = pw.TextStyle(font: fontRegular, fontSize: 8.9 * scale, color: _thermalSecondary);
     final storeStyle = pw.TextStyle(font: fontBold, fontSize: 12.8 * scale, color: _thermalPrimary);
@@ -3998,36 +4045,31 @@ class PosInvoicePrinter {
                   textAlign: pw.TextAlign.center,
                 ),
               ),
-            if (taxRegNo.isNotEmpty)
+            if (showPhone && property != null && property.printMobile != false && property.mobile.isNotEmpty)
+              pw.Text(
+                'Phone: ${property.mobile}',
+                textAlign: pw.TextAlign.center,
+              ),
+            if (showEmail && property != null && property.printEmail != false && property.email.isNotEmpty)
+              pw.Text(
+                'Email: ${property.email}',
+                textAlign: pw.TextAlign.center,
+              ),
+            if (property != null && property.printWebsite != false && property.website.isNotEmpty)
+              pw.Text(
+                'Website: ${property.website}',
+                textAlign: pw.TextAlign.center,
+              ),
+            if (resolvedTaxLine.isNotEmpty)
               pw.Padding(
                 padding: pw.EdgeInsets.only(top: 2 * scale),
                 child: pw.Text(
-                  taxRegNo,
+                  resolvedTaxLine,
                   textAlign: pw.TextAlign.center,
                   style: pw.TextStyle(font: fontBold, fontSize: 9.0 * scale, color: _thermalPrimary),
                 ),
-              )
-            else if (property != null) ...[
-              if (showPhone && property.printMobile != false && property.mobile.isNotEmpty)
-                pw.Text(
-                  'Phone: ${property.mobile}',
-                  textAlign: pw.TextAlign.center,
-                ),
-              if (showEmail && property.printEmail != false && property.email.isNotEmpty)
-                pw.Text(
-                  'Email: ${property.email}',
-                  textAlign: pw.TextAlign.center,
-                ),
-              if (property.printWebsite != false && property.website.isNotEmpty)
-                pw.Text(
-                  'Website: ${property.website}',
-                  textAlign: pw.TextAlign.center,
-                ),
-              if (property.gstNo.isNotEmpty && !property.gstNo.toUpperCase().contains('TAX_DEFAULT'))
-                pw.Text(
-                  '${_taxIdLabel(country)}: ${property.gstNo}',
-                  textAlign: pw.TextAlign.center,
-                ),
+              ),
+            if (property != null) ...[
               if (property.panNo.isNotEmpty)
                 pw.Text(
                   '${_businessRegLabel(country)}: ${property.panNo}',

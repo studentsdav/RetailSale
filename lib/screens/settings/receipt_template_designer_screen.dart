@@ -201,6 +201,15 @@ class _ReceiptTemplateDesignerScreenState extends State<ReceiptTemplateDesignerS
     super.dispose();
   }
 
+  String _getCountryTaxLabel([dynamic prop]) {
+    final stateOrCountry = (prop?.state ?? '').trim().toLowerCase();
+    if (stateOrCountry == 'kenya' || CurrencyService.code == 'KES') return 'KRA PIN';
+    if (stateOrCountry == 'uae' || CurrencyService.code == 'AED') return 'TRN';
+    if (stateOrCountry == 'uk' || CurrencyService.symbol == '£') return 'VAT Reg No';
+    if (CurrencyService.symbol == '₹' || CurrencyService.code == 'INR') return 'GSTIN';
+    return 'Tax ID';
+  }
+
   Future<void> _loadSettings() async {
     setState(() => _loading = true);
     SystemSettingsController settingsCtrl;
@@ -215,16 +224,30 @@ class _ReceiptTemplateDesignerScreenState extends State<ReceiptTemplateDesignerS
 
     final billConfig = settingsCtrl.settings?.receiptTemplateConfig ?? {};
     final a4Config = settingsCtrl.settings?.a4TemplateConfig ?? {};
-        final a5Config = settingsCtrl.settings?.a5TemplateConfig ?? {};
+    final a5Config = settingsCtrl.settings?.a5TemplateConfig ?? {};
     final kotConfig = settingsCtrl.settings?.kotTemplateConfig ?? {};
     final tokenConfig = settingsCtrl.settings?.tokenTemplateConfig ?? {};
     final prop = propCtrl.data;
 
+    final String defaultTaxLabel = _getCountryTaxLabel(prop);
+    final String defaultTaxVal = (prop?.gstNo.isNotEmpty == true && !prop!.gstNo.toUpperCase().contains('TAX_DEFAULT'))
+        ? '$defaultTaxLabel: ${prop.gstNo}'
+        : '';
+
+    String cleanConfigTax(dynamic rawVal) {
+      final s = (rawVal ?? '').toString().trim();
+      if (s.isEmpty) return defaultTaxVal;
+      if (s.contains('P051234567Z') || s.contains('P051987654X') || s.contains('P059988776Z') || s == 'KRA PIN / VAT:' || s == 'KRA PIN / GSTIN:') {
+        return defaultTaxVal;
+      }
+      return s;
+    }
+
     // 1. Bill 80mm Config
     _billHeaderTitleCtrl.text = billConfig['header_title'] ?? (prop?.propertyName.isNotEmpty == true ? prop!.propertyName : 'RETAIL POS STORE');
-    _billHeaderSubtextCtrl.text = billConfig['header_subtext'] ?? (prop?.address.isNotEmpty == true ? '${prop!.address}, ${prop.city}' : 'Nairobi, Kenya • Tel: +254 700 000000');
-    _billFooterNoteCtrl.text = billConfig['footer_note'] ?? (prop?.thermalFooterNote.isNotEmpty == true ? prop!.thermalFooterNote : 'Asante Sana! Thank you for your business.');
-    _billTaxRegNoCtrl.text = billConfig['tax_reg_no'] ?? (prop?.gstNo.isNotEmpty == true ? 'KRA PIN / VAT: ${prop!.gstNo}' : 'KRA PIN: P051234567Z');
+    _billHeaderSubtextCtrl.text = billConfig['header_subtext'] ?? (prop?.address.isNotEmpty == true ? '${prop!.address}, ${prop.city}' : 'Business Address & City');
+    _billFooterNoteCtrl.text = billConfig['footer_note'] ?? (prop?.thermalFooterNote.isNotEmpty == true ? prop!.thermalFooterNote : 'Thank you for your business!');
+    _billTaxRegNoCtrl.text = cleanConfigTax(billConfig['tax_reg_no']);
     _billTermsCtrl.text = billConfig['terms_and_conditions'] ?? (prop?.termsAndConditions.isNotEmpty == true ? prop!.termsAndConditions : 'Goods once sold will not be taken back or exchanged.');
     _billResellerFooterCtrl.text = billConfig['reseller_footer_text'] ?? AppBrand.poweredByLabel;
 
@@ -247,15 +270,15 @@ class _ReceiptTemplateDesignerScreenState extends State<ReceiptTemplateDesignerS
 
     // 2. A4 Invoice Config
     _a4HeaderTitleCtrl.text = a4Config['header_title'] ?? (prop?.propertyName.isNotEmpty == true ? prop!.propertyName : 'RETAIL ENTERPRISES LIMITED');
-    _a4HeaderSubtextCtrl.text = a4Config['header_subtext'] ?? (prop?.address.isNotEmpty == true ? '${prop!.address}, ${prop.city}, ${prop.state}' : 'Industrial Area, Commercial Street, Nairobi, Kenya');
-    _a4TaxRegNoCtrl.text = a4Config['tax_reg_no'] ?? (prop?.gstNo.isNotEmpty == true ? 'KRA PIN / GSTIN: ${prop!.gstNo}' : 'KRA PIN / GSTIN: P051987654X');
-    _a4PanNoCtrl.text = a4Config['pan_no'] ?? (prop?.panNo.isNotEmpty == true ? 'REG / PAN: ${prop!.panNo}' : 'COMPANY REG: CPR/2023/88990');
+    _a4HeaderSubtextCtrl.text = a4Config['header_subtext'] ?? (prop?.address.isNotEmpty == true ? '${prop!.address}, ${prop.city}, ${prop.state}' : 'Commercial Office & Address');
+    _a4TaxRegNoCtrl.text = cleanConfigTax(a4Config['tax_reg_no']);
+    _a4PanNoCtrl.text = a4Config['pan_no'] ?? (prop?.panNo.isNotEmpty == true ? 'REG / PAN: ${prop!.panNo}' : 'REG / PAN: 12345678');
     _a4FooterNoteCtrl.text = a4Config['footer_note'] ?? 'This is a computer generated invoice and does not require a physical signature.';
     _a4TermsCtrl.text = a4Config['terms_and_conditions'] ?? (prop?.termsAndConditions.isNotEmpty == true ? prop!.termsAndConditions : '1. Goods once sold will not be accepted back without prior inspection.\n2. Interest @ 18% p.a. will be charged on overdue payments after 30 days.\n3. Subject to local judicial arbitration.');
-    _a4BankNameCtrl.text = a4Config['bank_name'] ?? (prop?.bankName.isNotEmpty == true ? prop!.bankName : 'Standard Chartered / Equity Bank');
+    _a4BankNameCtrl.text = a4Config['bank_name'] ?? (prop?.bankName.isNotEmpty == true ? prop!.bankName : 'Commercial Bank');
     _a4BankAccountNoCtrl.text = a4Config['bank_account_no'] ?? (prop?.bankAccNo.isNotEmpty == true ? prop!.bankAccNo : 'A/C: 0102030405060');
-    _a4BankIfscCtrl.text = a4Config['bank_ifsc'] ?? (prop?.bankIfsc.isNotEmpty == true ? prop!.bankIfsc : 'SWIFT: SCBLKENX / Branch: 010');
-    _a4MpesaPaybillCtrl.text = a4Config['mpesa_paybill'] ?? 'M-Pesa Paybill: 247247 | A/C: 0712345678';
+    _a4BankIfscCtrl.text = a4Config['bank_ifsc'] ?? (prop?.bankIfsc.isNotEmpty == true ? prop!.bankIfsc : 'SWIFT / IFSC: 0001234');
+    _a4MpesaPaybillCtrl.text = a4Config['mpesa_paybill'] ?? 'Paybill / Till: 247247';
     _a4SignatoryLabelCtrl.text = a4Config['signatory_label'] ?? 'For ${prop?.propertyName.isNotEmpty == true ? prop!.propertyName : "RETAIL ENTERPRISES LTD"}\nAuthorized Signatory';
 
     _a4ShowLogo = a4Config['show_logo'] ?? true;
@@ -279,9 +302,9 @@ class _ReceiptTemplateDesignerScreenState extends State<ReceiptTemplateDesignerS
 
     // 3. A5 Invoice Config
     _a5HeaderTitleCtrl.text = a5Config['header_title'] ?? (a4Config['header_title'] ?? (prop?.propertyName.isNotEmpty == true ? prop!.propertyName : 'RETAIL ENTERPRISES LIMITED'));
-    _a5HeaderSubtextCtrl.text = a5Config['header_subtext'] ?? (a4Config['header_subtext'] ?? (prop?.address.isNotEmpty == true ? '${prop!.address}, ${prop.city}, ${prop.state}' : 'Industrial Area, Commercial Street, Nairobi, Kenya'));
-    _a5TaxRegNoCtrl.text = a5Config['tax_reg_no'] ?? (a4Config['tax_reg_no'] ?? (prop?.gstNo.isNotEmpty == true ? 'KRA PIN / GSTIN: ${prop!.gstNo}' : 'KRA PIN / GSTIN: P051987654X'));
-    _a5PanNoCtrl.text = a5Config['pan_no'] ?? (a4Config['pan_no'] ?? (prop?.panNo.isNotEmpty == true ? 'REG / PAN: ${prop!.panNo}' : 'COMPANY REG: CPR/2023/88990'));
+    _a5HeaderSubtextCtrl.text = a5Config['header_subtext'] ?? (a4Config['header_subtext'] ?? (prop?.address.isNotEmpty == true ? '${prop!.address}, ${prop.city}, ${prop.state}' : 'Commercial Office & Address'));
+    _a5TaxRegNoCtrl.text = cleanConfigTax(a5Config['tax_reg_no'] ?? a4Config['tax_reg_no']);
+    _a5PanNoCtrl.text = a5Config['pan_no'] ?? (a4Config['pan_no'] ?? (prop?.panNo.isNotEmpty == true ? 'REG / PAN: ${prop!.panNo}' : 'REG / PAN: 12345678'));
     _a5FooterNoteCtrl.text = a5Config['footer_note'] ?? (a4Config['footer_note'] ?? 'This is a computer generated invoice and does not require a physical signature.');
     _a5TermsCtrl.text = a5Config['terms_and_conditions'] ?? (a4Config['terms_and_conditions'] ?? (prop?.termsAndConditions.isNotEmpty == true ? prop!.termsAndConditions : '1. Goods once sold will not be accepted back without prior inspection.\n2. Interest @ 18% p.a. will be charged on overdue payments after 30 days.\n3. Subject to local judicial arbitration.'));
     _a5BankNameCtrl.text = a5Config['bank_name'] ?? (a4Config['bank_name'] ?? (prop?.bankName.isNotEmpty == true ? prop!.bankName : 'Standard Chartered / Equity Bank'));
@@ -621,7 +644,7 @@ class _ReceiptTemplateDesignerScreenState extends State<ReceiptTemplateDesignerS
                       const SizedBox(height: 12),
                       _buildTextField('Header Subtext (Address & Tel)', _billHeaderSubtextCtrl, 'e.g. Kimathi St, Nairobi • Tel: 0700000000', maxLines: 2),
                       const SizedBox(height: 12),
-                      _buildTextField('Tax Registration ID / KRA PIN / VAT', _billTaxRegNoCtrl, 'e.g. KRA PIN: P051234567Z'),
+                      _buildTextField('Tax Registration ID (${_getCountryTaxLabel()})', _billTaxRegNoCtrl, 'e.g. ${_getCountryTaxLabel()}: 123456789'),
                       const SizedBox(height: 12),
                       _buildTextField('Thermal Footer Note', _billFooterNoteCtrl, 'e.g. Asante Sana! Thank you for shopping with us.', maxLines: 2),
                       const SizedBox(height: 12),
@@ -766,7 +789,7 @@ class _ReceiptTemplateDesignerScreenState extends State<ReceiptTemplateDesignerS
                       const SizedBox(height: 12),
                       Row(
                         children: [
-                          Expanded(child: _buildTextField('KRA PIN / GSTIN / Tax ID', _a4TaxRegNoCtrl, 'e.g. P051987654X')),
+                          Expanded(child: _buildTextField('Tax ID / ${_getCountryTaxLabel()}', _a4TaxRegNoCtrl, 'e.g. ${_getCountryTaxLabel()}: 123456789')),
                           const SizedBox(width: 12),
                           Expanded(child: _buildTextField('Company Reg / PAN', _a4PanNoCtrl, 'e.g. CPR/2023/88990')),
                         ],
@@ -939,7 +962,7 @@ class _ReceiptTemplateDesignerScreenState extends State<ReceiptTemplateDesignerS
                       const SizedBox(height: 12),
                       Row(
                         children: [
-                          Expanded(child: _buildTextField('KRA PIN / GSTIN / Tax ID', _a5TaxRegNoCtrl, 'e.g. P051987654X')),
+                          Expanded(child: _buildTextField('Tax ID / ${_getCountryTaxLabel()}', _a5TaxRegNoCtrl, 'e.g. ${_getCountryTaxLabel()}: 123456789')),
                           const SizedBox(width: 12),
                           Expanded(child: _buildTextField('Company Reg / PAN', _a5PanNoCtrl, 'e.g. CPR/2023/88990')),
                         ],
@@ -1203,7 +1226,7 @@ class _ReceiptTemplateDesignerScreenState extends State<ReceiptTemplateDesignerS
                         SizedBox(height: 3 * scale),
                         Text('Apex Commercial Supplies Ltd', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 8.5 * scale)),
                         Text('Plot 45, Uhuru Highway, Nairobi', style: TextStyle(fontSize: 7.8 * scale, color: const Color(0xFF475569))),
-                        Text('KRA PIN: P059988776Z', style: TextStyle(fontSize: 7.8 * scale, color: const Color(0xFF475569))),
+                        Text('${_getCountryTaxLabel()}: ${_getCountryTaxLabel() == "GSTIN" ? "07AAAAA0000A1Z5" : "TAX-99887766"}', style: TextStyle(fontSize: 7.8 * scale, color: const Color(0xFF475569))),
                       ],
                     ),
                   ),
@@ -2128,7 +2151,7 @@ class _ReceiptTemplateDesignerScreenState extends State<ReceiptTemplateDesignerS
                         SizedBox(height: 4 * scale),
                         Text('Apex Commercial Supplies Ltd', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 9.5 * scale)),
                         Text('Plot 45, Uhuru Highway, Nairobi', style: TextStyle(fontSize: 8.5 * scale, color: const Color(0xFF475569))),
-                        Text('KRA PIN: P059988776Z | Tel: +254 711 223344', style: TextStyle(fontSize: 8.5 * scale, color: const Color(0xFF475569))),
+                        Text('${_getCountryTaxLabel()}: ${_getCountryTaxLabel() == "GSTIN" ? "07AAAAA0000A1Z5" : "TAX-99887766"} | Tel: +1 555 0199', style: TextStyle(fontSize: 8.5 * scale, color: const Color(0xFF475569))),
                       ],
                     ),
                   ),

@@ -32,6 +32,7 @@ router.get('/repayments', advancedCtrl.listRepayments);
 router.post('/opening-balance', advancedCtrl.setOpeningBalance);
 router.get('/opening-balance', advancedCtrl.getOpeningBalances);
 router.get('/credit-report', advancedCtrl.getCreditReport);
+router.get('/customer-ledger', advancedCtrl.getCustomerLedger);
 router.get('/delivery-report', advancedCtrl.getDeliveryReport);
 router.get('/expiry-report', advancedCtrl.getExpiryReport);
 router.get('/payment-flow', advancedCtrl.getPaymentFlowReport);

@@ -14,12 +14,20 @@ module.exports = (sequelize, DataTypes) => {
         tax_amount: DataTypes.DECIMAL(12, 2),
         total_after_tax: DataTypes.DECIMAL(12, 2),
         department: DataTypes.STRING,
+        sale_rate: DataTypes.DECIMAL(12, 2),
         expiry_date: DataTypes.DATEONLY,
         remarks: DataTypes.TEXT
     }, {
         tableName: 'goods_receipt_items',
         timestamps: false
     });
+
+    if (sequelize && typeof sequelize.query === 'function') {
+        sequelize.query(`
+            ALTER TABLE goods_receipt_items 
+            ADD COLUMN IF NOT EXISTS sale_rate DECIMAL(12, 2);
+        `).catch(() => {});
+    }
     goods_receipt_items.associate = (models) => {
 
         goods_receipt_items.belongsTo(models.goods_receipts, {

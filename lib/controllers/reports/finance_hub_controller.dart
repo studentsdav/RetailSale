@@ -98,12 +98,20 @@ class FinanceHubController extends ChangeNotifier {
     });
   }
 
-  Future<void> loadCreditReport({required DateTime fromDate, required DateTime toDate, String customer = ''}) async {
+  Future<void> loadCreditReport({
+    required DateTime fromDate,
+    required DateTime toDate,
+    String customer = '',
+    bool includeAll = false,
+  }) async {
     await _run(() async {
       final params = <String>[
         'from_date=${DateFormat('yyyy-MM-dd').format(fromDate)}',
         'to_date=${DateFormat('yyyy-MM-dd').format(toDate)}',
       ];
+      if (includeAll) {
+        params.add('include_all=true');
+      }
       if (outletId != null) {
         if (outletId == -1) {
           params.add('outlet_id=ALL');
@@ -120,6 +128,35 @@ class FinanceHubController extends ChangeNotifier {
           .map((e) => CreditCustomerReport.fromJson(Map<String, dynamic>.from(e)))
           .toList();
     });
+  }
+
+  Future<CustomerLedgerReport> fetchCustomerLedger({
+    required String customerPhone,
+    String customerName = '',
+    DateTime? fromDate,
+    DateTime? toDate,
+  }) async {
+    final params = <String>[
+      'customer_phone=${Uri.encodeComponent(customerPhone.trim())}',
+    ];
+    if (customerName.trim().isNotEmpty) {
+      params.add('customer_name=${Uri.encodeComponent(customerName.trim())}');
+    }
+    if (fromDate != null) {
+      params.add('from_date=${DateFormat('yyyy-MM-dd').format(fromDate)}');
+    }
+    if (toDate != null) {
+      params.add('to_date=${DateFormat('yyyy-MM-dd').format(toDate)}');
+    }
+    if (outletId != null) {
+      if (outletId == -1) {
+        params.add('outlet_id=ALL');
+      } else {
+        params.add('outlet_id=$outletId');
+      }
+    }
+    final res = await ApiClient.get('${ApiEndpoints.financeCustomerLedger}?${params.join('&')}');
+    return CustomerLedgerReport.fromJson(Map<String, dynamic>.from(res));
   }
 
   Future<void> saveRepayment({

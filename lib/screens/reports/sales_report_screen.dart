@@ -1356,6 +1356,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       if (sale.cashAmount > 0.009) splits.add({'mode': 'CASH', 'amount': sale.cashAmount});
       if (sale.cardAmount > 0.009) splits.add({'mode': 'CARD', 'amount': sale.cardAmount});
       if (sale.upiAmount > 0.009) splits.add({'mode': 'UPI', 'amount': sale.upiAmount});
+      if (sale.creditAmount > 0.009) splits.add({'mode': 'CREDIT', 'amount': sale.creditAmount});
       if (sale.otherAmount > 0.009) splits.add({'mode': 'OTHER', 'amount': sale.otherAmount});
       if (sale.advanceAmount > 0.009) splits.add({'mode': 'ADVANCE_DEPOSIT', 'amount': sale.advanceAmount});
       if (sale.advanceAdjustmentAmount > 0.009) splits.add({'mode': 'ADVANCE_ADJUSTMENT', 'amount': sale.advanceAdjustmentAmount});

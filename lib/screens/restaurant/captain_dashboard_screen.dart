@@ -3168,17 +3168,26 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
                 subtitle: Text('Designate a waiter or captain for this table'),
               ),
             ),
-            if (MediaQuery.of(context).size.width >= 900)
-              SimpleDialogOption(
-                onPressed: () {
-                  Navigator.pop(dialogContext);
-                  _showBillingCheckoutDialog(context, table, ctrl);
-                },
-                child: const ListTile(
-                  leading: Icon(Icons.receipt_long, color: Colors.teal),
-                  title: Text('Print Bill & Settle'),
+            SimpleDialogOption(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                _showBillingCheckoutDialog(context, table, ctrl);
+              },
+              child: ListTile(
+                leading: const Icon(Icons.receipt_long, color: Colors.teal),
+                title: Text(
+                  (table['status']?.toString().toLowerCase() == 'billed')
+                      ? 'Re-send Bill Request / Settle'
+                      : 'Request Bill / Send to Cashier',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: Text(
+                  (table['status']?.toString().toLowerCase() == 'billed')
+                      ? 'Notify cashier again or proceed to settlement'
+                      : 'Mark table as billed & alert cashier to print bill',
                 ),
               ),
+            ),
             SimpleDialogOption(
               onPressed: () {
                 Navigator.pop(dialogContext);
@@ -3606,12 +3615,15 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
     final bool canCashierBill = !isWaiter && (permissions.contains('RETAIL_SALES') || role == 'ADMIN' || role == 'MANAGER' || role == 'CASHIER' || role == 'SUPERADMIN') && (MediaQuery.of(context).size.width >= 900);
 
     if (!canCashierBill) {
+      final String currentStatus = ctrl.tables.firstWhere((t) => t['id'] == tableId, orElse: () => {})['status']?.toString().toLowerCase() ?? '';
       ctrl.updateTableStatus(tableId, 'Billed');
       _refreshData();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Bill Request sent to Cashier! Table marked as Bill Required.'),
+            content: Text(currentStatus == 'billed'
+                ? 'Bill Request re-sent to Cashier! Cashier alerted for Table payment.'
+                : 'Bill Request sent to Cashier! Table marked as Bill Required.'),
             backgroundColor: Colors.teal.shade700,
             behavior: SnackBarBehavior.floating,
           ),
@@ -3713,58 +3725,62 @@ class _CaptainDashboardScreenState extends State<CaptainDashboardScreen>
                           border: Border.all(color: Colors.grey.shade300),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFE0E7FF),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.receipt_outlined, size: 16, color: Color(0xFF3730A3)),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    tag,
-                                    style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF3730A3), fontSize: 13),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE0E7FF),
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
-                                ],
-                              ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.receipt_outlined, size: 15, color: Color(0xFF3730A3)),
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        tag,
+                                        style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF3730A3), fontSize: 13),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Text(
+                                  '$itemCount items • ${clientKots.length} KOT(s)',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black87),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '$itemCount items • ${clientKots.length} KOT(s)',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    itemNames.join(', '),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                                  ),
-                                ],
+                            if (itemNames.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                itemNames.join(', '),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green.shade700,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ],
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green.shade700,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                                icon: const Icon(Icons.point_of_sale, size: 16),
+                                label: Text('Settle $tag', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                                onPressed: () {
+                                  Navigator.pop(dialogContext);
+                                  _proceedTableBilling(tableId, kots, ctrl, specificClientTag: tag);
+                                },
                               ),
-                              icon: const Icon(Icons.point_of_sale, size: 16),
-                              label: Text('Settle $tag', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                              onPressed: () {
-                                Navigator.pop(dialogContext);
-                                _proceedTableBilling(tableId, kots, ctrl, specificClientTag: tag);
-                              },
                             ),
                           ],
                         ),

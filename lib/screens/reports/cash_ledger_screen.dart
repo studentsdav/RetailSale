@@ -23,6 +23,7 @@ import '../../controllers/inventory/stock_transfer_controller.dart';
 import '../../core/printing/pos_invoice_printer.dart';
 import '../../utils/branding_storage.dart';
 import '../../utils/pdf_report_builder.dart';
+import '../../widgets/sale_bill_preview_dialog.dart';
 
 class CashLedgerScreen extends StatefulWidget {
   final int initialIndex;
@@ -72,6 +73,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
   String expiryStatus = 'ALL';
   String openingPaymentMode = 'CASH';
   bool _showOutstandingOnly = false;
+  bool _showAllCustomers = false;
 
   final Set<String> _expandedBillsCustomers = {};
   final Set<String> _expandedAdvancesCustomers = {};
@@ -259,7 +261,8 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
         await ctrl.loadCreditReport(
             fromDate: fromDate,
             toDate: toDate,
-            customer: creditSearchCtrl.text);
+            customer: creditSearchCtrl.text,
+            includeAll: _showAllCustomers);
         break;
       case 1:
         await ctrl.loadLedger(
@@ -1147,6 +1150,933 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                 child: const Text('Save Repayment'),
               ),
             ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _printCustomerLedgerPdf(CustomerLedgerReport report) async {
+    final propertyCtrl = PropertyInfoController();
+    await propertyCtrl.load();
+    final property = propertyCtrl.data;
+    final fonts = await PosInvoicePrinter.getInvoiceFonts();
+    final pdf = pw.Document(
+      theme: pw.ThemeData.withFont(
+        base: fonts.regular,
+        bold: fonts.bold,
+      ),
+    );
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(24),
+        build: (pw.Context context) {
+          return [
+            // Business Header
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      property?.propertyName ?? 'Business Statement',
+                      style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+                    ),
+                    if (property != null && property.address.isNotEmpty)
+                      pw.Text(property.address, style: const pw.TextStyle(fontSize: 9)),
+                    if (property != null && property.mobile.isNotEmpty)
+                      pw.Text('Phone: ${property.mobile}', style: const pw.TextStyle(fontSize: 9)),
+                    if (property != null && property.gstNo.isNotEmpty)
+                      pw.Text('GSTIN: ${property.gstNo}', style: const pw.TextStyle(fontSize: 9)),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(
+                      'CUSTOMER STATEMENT',
+                      style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800),
+                    ),
+                    pw.Text(
+                      'Date: ${DateFormat('dd-MMM-yyyy').format(DateTime.now())}',
+                      style: const pw.TextStyle(fontSize: 9),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 12),
+            pw.Divider(thickness: 1, color: PdfColors.grey400),
+            pw.SizedBox(height: 8),
+
+            // Customer Info Box & Summary Box
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Container(
+                  width: 250,
+                  padding: const pw.EdgeInsets.all(8),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey300),
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('STATEMENT FOR:', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+                      pw.SizedBox(height: 4),
+                      pw.Text(report.customerName, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                      if (report.customerPhone.isNotEmpty)
+                        pw.Text('Phone: ${report.customerPhone}', style: const pw.TextStyle(fontSize: 9)),
+                      if (report.customerAddress.isNotEmpty)
+                        pw.Text('Address: ${report.customerAddress}', style: const pw.TextStyle(fontSize: 9)),
+                      if (report.customerGstin.isNotEmpty)
+                        pw.Text('GSTIN: ${report.customerGstin}', style: const pw.TextStyle(fontSize: 9)),
+                    ],
+                  ),
+                ),
+                pw.Container(
+                  width: 250,
+                  padding: const pw.EdgeInsets.all(8),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.grey100,
+                    border: pw.Border.all(color: PdfColors.grey300),
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('ACCOUNT SUMMARY', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+                      pw.SizedBox(height: 4),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text('Total Debited (Charges):', style: const pw.TextStyle(fontSize: 9)),
+                          pw.Text(_money(report.totalDebit), style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                        ],
+                      ),
+                      pw.SizedBox(height: 2),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text('Total Credited (Paid):', style: const pw.TextStyle(fontSize: 9)),
+                          pw.Text(_money(report.totalCredit), style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.green800)),
+                        ],
+                      ),
+                      pw.Divider(thickness: 0.5, color: PdfColors.grey400),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text('Closing Balance:', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                          pw.Text(
+                            report.closingBalance > 0.009
+                                ? '${_money(report.closingBalance)} Dr (Due)'
+                                : (report.closingBalance < -0.009
+                                    ? '${_money(report.closingBalance.abs())} Cr (Advance)'
+                                    : '${_money(0)} (Settled)'),
+                            style: pw.TextStyle(
+                              fontSize: 10,
+                              fontWeight: pw.FontWeight.bold,
+                              color: report.closingBalance > 0.009 ? PdfColors.red800 : (report.closingBalance < -0.009 ? PdfColors.green800 : PdfColors.black),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 16),
+
+            // Transactions Table
+            pw.TableHelper.fromTextArray(
+              headers: ['Date', 'Particulars / Description', 'Ref / Voucher', 'Mode', 'Debit (Dr)', 'Credit (Cr)', 'Balance'],
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.white),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.blue800),
+              cellStyle: const pw.TextStyle(fontSize: 8),
+              cellAlignment: pw.Alignment.centerLeft,
+              cellAlignments: {
+                0: pw.Alignment.centerLeft,
+                1: pw.Alignment.centerLeft,
+                2: pw.Alignment.centerLeft,
+                3: pw.Alignment.center,
+                4: pw.Alignment.centerRight,
+                5: pw.Alignment.centerRight,
+                6: pw.Alignment.centerRight,
+              },
+              data: report.entries.map((tx) {
+                final dateStr = DateFormat('dd-MMM-yyyy').format(tx.date);
+                final debitStr = tx.debit > 0.009 ? _money(tx.debit) : '-';
+                final creditStr = tx.credit > 0.009 ? _money(tx.credit) : '-';
+                final balStr = tx.balance > 0.009
+                    ? '${_money(tx.balance)} Dr'
+                    : (tx.balance < -0.009 ? '${_money(tx.balance.abs())} Cr' : _money(0));
+                return [
+                  dateStr,
+                  tx.description,
+                  tx.voucherNo,
+                  tx.paymentMode,
+                  debitStr,
+                  creditStr,
+                  balStr,
+                ];
+              }).toList(),
+            ),
+          ];
+        },
+      ),
+    );
+
+    await Printing.layoutPdf(
+      name: 'Customer_Ledger_${report.customerName.replaceAll(RegExp(r'\s+'), '_')}',
+      onLayout: (format) async => pdf.save(),
+    );
+  }
+
+  Future<Map<String, dynamic>?> _fetchSaleBillDetails(
+    String billNo, {
+    CreditCustomerReport? customer,
+  }) async {
+    final cleanNo = billNo.trim();
+    if (cleanNo.isEmpty) return null;
+
+    if (customer != null) {
+      for (final b in customer.bills) {
+        final bNo = b.billNo.trim().toUpperCase();
+        final cNo = cleanNo.toUpperCase();
+        if (bNo == cNo || bNo.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '') == cNo.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')) {
+          if (b.saleId > 0) {
+            try {
+              final res = await ApiClient.get('${ApiEndpoints.sales}/${b.saleId}');
+              if (res != null && res['success'] == true && res['data'] != null && res['data'] is Map) {
+                return Map<String, dynamic>.from(res['data']);
+              }
+            } catch (_) {}
+          }
+        }
+      }
+    }
+
+    try {
+      final res = await ApiClient.get('${ApiEndpoints.sales}/${Uri.encodeComponent(cleanNo)}');
+      if (res != null && res['success'] == true && res['data'] != null && res['data'] is Map) {
+        return Map<String, dynamic>.from(res['data']);
+      }
+    } catch (_) {}
+
+    if (customer != null) {
+      for (final b in customer.bills) {
+        final bNo = b.billNo.trim().toUpperCase();
+        final cNo = cleanNo.toUpperCase();
+        if (bNo == cNo || bNo.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '') == cNo.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')) {
+          return {
+            'sale_no': b.billNo,
+            'sale_date': b.billDate.toIso8601String(),
+            'status': b.paymentStatus.isNotEmpty ? b.paymentStatus : 'COMPLETED',
+            'payment_mode': 'CREDIT',
+            'customer_name': customer.customerName,
+            'customer_phone': customer.customerPhone,
+            'customer_address': customer.customerAddress,
+            'customer_gstin': customer.customerGstin,
+            'total_amount': b.amount,
+            'net_amount': b.amount,
+            'payment_status': b.paymentStatus,
+            'items': <Map<String, dynamic>>[
+              {
+                'item_id': 0,
+                'item_name': 'Bill Credit Settlement',
+                'unit': 'Nos',
+                'qty': 1.0,
+                'rate': b.amount,
+                'line_total': b.amount,
+                'net_amount': b.amount,
+                'tax_percent': 0.0,
+                'remarks': 'Outstanding: ${_money(b.outstanding)} | Paid: ${_money(b.totalPaid)}',
+              }
+            ],
+          };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  Future<void> _showSaleBillPreviewDialog(
+    String billNo, {
+    CreditCustomerReport? customer,
+  }) async {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 16),
+                Text('Loading bill...'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    Map<String, dynamic>? sale;
+    try {
+      sale = await _fetchSaleBillDetails(billNo, customer: customer);
+    } catch (_) {}
+
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+
+    if (sale != null) {
+      await showSaleBillPreviewDialog(context, sale: sale);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Sale bill "$billNo" details could not be found.'),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+    }
+  }
+
+  Future<void> _showCustomerLedgerDialog(CreditCustomerReport customer) async {
+    DateTime? filterFrom = fromDate;
+    DateTime? filterTo = toDate;
+    bool allTime = true;
+    CustomerLedgerReport? ledgerReport;
+    bool isLoading = true;
+    String? errorMsg;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          void fetchLedger() async {
+            setDialogState(() {
+              isLoading = true;
+              errorMsg = null;
+            });
+            try {
+              final res = await ctrl.fetchCustomerLedger(
+                customerPhone: customer.customerPhone,
+                customerName: customer.customerName,
+                fromDate: allTime ? null : filterFrom,
+                toDate: allTime ? null : filterTo,
+              );
+              if (mounted) {
+                setDialogState(() {
+                  ledgerReport = res;
+                  isLoading = false;
+                });
+              }
+            } catch (e) {
+              if (mounted) {
+                setDialogState(() {
+                  errorMsg = e.toString().replaceAll('Exception: ', '');
+                  isLoading = false;
+                });
+              }
+            }
+          }
+
+          if (isLoading && ledgerReport == null && errorMsg == null) {
+            fetchLedger();
+          }
+
+          final screenWidth = MediaQuery.of(context).size.width;
+          final dialogWidth = (screenWidth * 0.92).clamp(320.0, 1000.0);
+          final dialogHeight = (MediaQuery.of(context).size.height * 0.88).clamp(420.0, 780.0);
+
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            clipBehavior: Clip.antiAlias,
+            backgroundColor: Colors.white,
+            child: SizedBox(
+              width: dialogWidth,
+              height: dialogHeight,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Dialog Header
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        CircleAvatar(
+                          radius: 22,
+                          backgroundColor: const Color(0xFF2563EB),
+                          child: Text(
+                            customer.customerName.isNotEmpty
+                                ? customer.customerName.trim()[0].toUpperCase()
+                                : 'C',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      customer.customerName.isNotEmpty
+                                          ? customer.customerName
+                                          : 'Customer Statement',
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF0F172A),
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFEFF6FF),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Text(
+                                      'Complete Ledger',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF2563EB),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Wrap(
+                                spacing: 12,
+                                children: [
+                                  if (customer.customerPhone.isNotEmpty)
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.phone_rounded, size: 12, color: Colors.grey.shade600),
+                                        const SizedBox(width: 4),
+                                        Text(customer.customerPhone, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                                      ],
+                                    ),
+                                  if (customer.customerGstin.isNotEmpty)
+                                    Text('GSTIN: ${customer.customerGstin}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                                  if (customer.customerAddress.isNotEmpty)
+                                    Text(customer.customerAddress, style: TextStyle(fontSize: 12, color: Colors.grey.shade600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (ledgerReport != null && ledgerReport!.entries.isNotEmpty)
+                          IconButton(
+                            tooltip: 'Print Statement (PDF)',
+                            icon: const Icon(Icons.print_rounded, color: Color(0xFF2563EB)),
+                            onPressed: () => _printCustomerLedgerPdf(ledgerReport!),
+                          ),
+                        IconButton(
+                          tooltip: 'Close',
+                          icon: const Icon(Icons.close_rounded, color: Colors.black54),
+                          onPressed: () => Navigator.pop(dialogCtx),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Filter Chips & Range Bar
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
+                    ),
+                    child: Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      alignment: WrapAlignment.spaceBetween,
+                      children: [
+                        Wrap(
+                          spacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            FilterChip(
+                              label: const Text('All Time'),
+                              selected: allTime,
+                              selectedColor: const Color(0xFFEFF6FF),
+                              checkmarkColor: const Color(0xFF2563EB),
+                              labelStyle: TextStyle(
+                                color: allTime ? const Color(0xFF2563EB) : Colors.grey.shade700,
+                                fontWeight: allTime ? FontWeight.bold : FontWeight.normal,
+                                fontSize: 12,
+                              ),
+                              onSelected: (val) {
+                                setDialogState(() {
+                                  allTime = val;
+                                });
+                                fetchLedger();
+                              },
+                            ),
+                            if (!allTime) ...[
+                              ActionChip(
+                                avatar: const Icon(Icons.calendar_today, size: 13),
+                                label: Text(
+                                  filterFrom != null ? _fmtDate(filterFrom!) : 'From Date',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                onPressed: () async {
+                                  final p = await showDatePicker(
+                                    context: context,
+                                    initialDate: filterFrom ?? DateTime.now(),
+                                    firstDate: DateTime(2020),
+                                    lastDate: DateTime(2100),
+                                  );
+                                  if (p != null) {
+                                    setDialogState(() {
+                                      filterFrom = p;
+                                    });
+                                    fetchLedger();
+                                  }
+                                },
+                              ),
+                              const Text('to', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                              ActionChip(
+                                avatar: const Icon(Icons.calendar_today, size: 13),
+                                label: Text(
+                                  filterTo != null ? _fmtDate(filterTo!) : 'To Date',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                onPressed: () async {
+                                  final p = await showDatePicker(
+                                    context: context,
+                                    initialDate: filterTo ?? DateTime.now(),
+                                    firstDate: DateTime(2020),
+                                    lastDate: DateTime(2100),
+                                  );
+                                  if (p != null) {
+                                    setDialogState(() {
+                                      filterTo = p;
+                                    });
+                                    fetchLedger();
+                                  }
+                                },
+                              ),
+                            ],
+                          ],
+                        ),
+                        IconButton(
+                          tooltip: 'Refresh Ledger',
+                          icon: const Icon(Icons.refresh_rounded, size: 20),
+                          onPressed: fetchLedger,
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Summary KPI Row
+                  if (ledgerReport != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      color: const Color(0xFFF8FAFC),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final isCompact = constraints.maxWidth < 600;
+                          return Row(
+                            children: [
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.grey.shade200),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Total Debit (Invoiced)',
+                                        style: TextStyle(fontSize: isCompact ? 10 : 11, color: Colors.grey.shade600),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        _money(ledgerReport!.totalDebit),
+                                        style: TextStyle(
+                                          fontSize: isCompact ? 13 : 15,
+                                          fontWeight: FontWeight.bold,
+                                          color: const Color(0xFFDC2626),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.grey.shade200),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Total Credit (Paid)',
+                                        style: TextStyle(fontSize: isCompact ? 10 : 11, color: Colors.grey.shade600),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        _money(ledgerReport!.totalCredit),
+                                        style: TextStyle(
+                                          fontSize: isCompact ? 13 : 15,
+                                          fontWeight: FontWeight.bold,
+                                          color: const Color(0xFF16A34A),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: ledgerReport!.closingBalance > 0.009
+                                          ? Colors.red.shade200
+                                          : (ledgerReport!.closingBalance < -0.009 ? Colors.green.shade200 : Colors.grey.shade200),
+                                    ),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Net Balance',
+                                        style: TextStyle(fontSize: isCompact ? 10 : 11, color: Colors.grey.shade600),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        ledgerReport!.closingBalance > 0.009
+                                            ? '${_money(ledgerReport!.closingBalance)} Dr'
+                                            : (ledgerReport!.closingBalance < -0.009
+                                                ? '${_money(ledgerReport!.closingBalance.abs())} Cr'
+                                                : '${_money(0)} Settled'),
+                                        style: TextStyle(
+                                          fontSize: isCompact ? 13 : 15,
+                                          fontWeight: FontWeight.bold,
+                                          color: ledgerReport!.closingBalance > 0.009
+                                              ? const Color(0xFFDC2626)
+                                              : (ledgerReport!.closingBalance < -0.009 ? const Color(0xFF16A34A) : Colors.black87),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+
+                  // Ledger Transactions Table / Body
+                  Expanded(
+                    child: isLoading
+                        ? const Center(child: CircularProgressIndicator())
+                        : errorMsg != null
+                            ? Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(24),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.error_outline_rounded, color: Colors.red, size: 40),
+                                      const SizedBox(height: 10),
+                                      Text(errorMsg!, style: const TextStyle(color: Colors.red)),
+                                      const SizedBox(height: 12),
+                                      FilledButton(onPressed: fetchLedger, child: const Text('Retry')),
+                                    ],
+                                  ),
+                                ),
+                              )
+                            : (ledgerReport == null || ledgerReport!.entries.isEmpty)
+                                ? Center(
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(32),
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.receipt_long_outlined, size: 48, color: Colors.grey.shade400),
+                                          const SizedBox(height: 12),
+                                          Text(
+                                            'No recorded transactions found for ${customer.customerName}',
+                                            style: TextStyle(fontSize: 14, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            'All sales, payments, advances, and adjustments will appear here automatically.',
+                                            style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                : LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      final isWide = constraints.maxWidth >= 720;
+                                      final entries = ledgerReport!.entries;
+
+                                      if (!isWide) {
+                                        // Mobile Cards View
+                                        return ListView.separated(
+                                          padding: const EdgeInsets.all(12),
+                                          itemCount: entries.length,
+                                          separatorBuilder: (_, __) => const SizedBox(height: 8),
+                                          itemBuilder: (context, index) {
+                                            final tx = entries[index];
+                                            final isDebit = tx.debit > 0.009;
+                                            return Card(
+                                              elevation: 0,
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius: BorderRadius.circular(10),
+                                                side: BorderSide(color: Colors.grey.shade200),
+                                              ),
+                                              color: Colors.white,
+                                              child: Padding(
+                                                padding: const EdgeInsets.all(12),
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Row(
+                                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                      children: [
+                                                        Text(
+                                                          DateFormat('dd-MMM-yyyy').format(tx.date),
+                                                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+                                                        ),
+                                                        Container(
+                                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                          decoration: BoxDecoration(
+                                                            color: const Color(0xFFF1F5F9),
+                                                            borderRadius: BorderRadius.circular(4),
+                                                          ),
+                                                          child: Text(
+                                                            tx.paymentMode,
+                                                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF475569)),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    const SizedBox(height: 6),
+                                                    Text(
+                                                      tx.description,
+                                                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                                                    ),
+                                                    if (tx.voucherNo.isNotEmpty)
+                                                      InkWell(
+                                                        onTap: () => _showSaleBillPreviewDialog(tx.voucherNo, customer: customer),
+                                                        child: Padding(
+                                                          padding: const EdgeInsets.symmetric(vertical: 2),
+                                                          child: Row(
+                                                            mainAxisSize: MainAxisSize.min,
+                                                            children: [
+                                                              Text('Ref: ${tx.voucherNo}', style: const TextStyle(fontSize: 11, color: Color(0xFF2563EB), fontWeight: FontWeight.bold)),
+                                                              const SizedBox(width: 4),
+                                                              const Icon(Icons.visibility_outlined, size: 14, color: Color(0xFF2563EB)),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    const SizedBox(height: 8),
+                                                    const Divider(height: 1),
+                                                    const SizedBox(height: 8),
+                                                    Row(
+                                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                      children: [
+                                                        Column(
+                                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                                          children: [
+                                                            Text(
+                                                              isDebit ? 'Debit (Charges)' : 'Credit (Paid)',
+                                                              style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                                                            ),
+                                                            Text(
+                                                              isDebit ? _money(tx.debit) : _money(tx.credit),
+                                                              style: TextStyle(
+                                                                fontSize: 13,
+                                                                fontWeight: FontWeight.bold,
+                                                                color: isDebit ? const Color(0xFFDC2626) : const Color(0xFF16A34A),
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        Column(
+                                                          crossAxisAlignment: CrossAxisAlignment.end,
+                                                          children: [
+                                                            Text('Balance', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                                                            Text(
+                                                              tx.balance > 0.009
+                                                                  ? '${_money(tx.balance)} Dr'
+                                                                  : (tx.balance < -0.009 ? '${_money(tx.balance.abs())} Cr' : _money(0)),
+                                                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF334155)),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    if (tx.notes.isNotEmpty) ...[
+                                                      const SizedBox(height: 4),
+                                                      Text(tx.notes, style: TextStyle(fontSize: 10, fontStyle: FontStyle.italic, color: Colors.grey.shade600)),
+                                                    ],
+                                                  ],
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        );
+                                      }
+
+                                      // Full Desktop/Tablet Table View
+                                      return SingleChildScrollView(
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                        child: SizedBox(
+                                          width: double.infinity,
+                                          child: DataTable(
+                                            headingRowColor: WidgetStateProperty.all(const Color(0xFFF1F5F9)),
+                                            horizontalMargin: 12,
+                                            columnSpacing: 16,
+                                            dataRowMinHeight: 44,
+                                            dataRowMaxHeight: 56,
+                                            columns: const [
+                                              DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                                              DataColumn(label: Text('Particulars / Description', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                                              DataColumn(label: Text('Ref / Bill #', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                                              DataColumn(label: Text('Mode', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                                              DataColumn(numeric: true, label: Text('Debit (+Due)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFFDC2626)))),
+                                              DataColumn(numeric: true, label: Text('Credit (-Paid)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF16A34A)))),
+                                              DataColumn(numeric: true, label: Text('Running Balance', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                                            ],
+                                            rows: entries.asMap().entries.map((entry) {
+                                              final index = entry.key;
+                                              final tx = entry.value;
+                                              final isDebit = tx.debit > 0.009;
+                                              final isCredit = tx.credit > 0.009;
+                                              return DataRow(
+                                                color: WidgetStateProperty.all(index % 2 == 0 ? Colors.white : const Color(0xFFFAFAFA)),
+                                                cells: [
+                                                  DataCell(Text(DateFormat('dd-MMM-yyyy').format(tx.date), style: const TextStyle(fontSize: 12))),
+                                                  DataCell(
+                                                    Column(
+                                                      mainAxisAlignment: MainAxisAlignment.center,
+                                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                                      children: [
+                                                        Text(tx.description, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                                        if (tx.notes.isNotEmpty)
+                                                          Text(tx.notes, style: TextStyle(fontSize: 10, color: Colors.grey.shade500), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  DataCell(
+                                                    Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        Text(tx.voucherNo.isNotEmpty ? tx.voucherNo : '-', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                                                        if (tx.voucherNo.isNotEmpty) ...[
+                                                          const SizedBox(width: 4),
+                                                          IconButton(
+                                                            icon: const Icon(Icons.visibility_outlined, size: 16, color: Color(0xFF2563EB)),
+                                                            tooltip: 'View Bill ${tx.voucherNo}',
+                                                            padding: EdgeInsets.zero,
+                                                            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                                                            onPressed: () => _showSaleBillPreviewDialog(tx.voucherNo, customer: customer),
+                                                          ),
+                                                        ],
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  DataCell(
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                      decoration: BoxDecoration(
+                                                        color: const Color(0xFFF1F5F9),
+                                                        borderRadius: BorderRadius.circular(4),
+                                                      ),
+                                                      child: Text(tx.paymentMode, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF475569))),
+                                                    ),
+                                                  ),
+                                                  DataCell(
+                                                    isDebit
+                                                        ? Text(_money(tx.debit), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFDC2626)))
+                                                        : const Text('-', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                                  ),
+                                                  DataCell(
+                                                    isCredit
+                                                        ? Text(_money(tx.credit), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)))
+                                                        : const Text('-', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                                  ),
+                                                  DataCell(
+                                                    Text(
+                                                      tx.balance > 0.009
+                                                          ? '${_money(tx.balance)} Dr'
+                                                          : (tx.balance < -0.009 ? '${_money(tx.balance.abs())} Cr' : _money(0)),
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: tx.balance > 0.009
+                                                            ? const Color(0xFFDC2626)
+                                                            : (tx.balance < -0.009 ? const Color(0xFF16A34A) : Colors.black87),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              );
+                                            }).toList(),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                  ),
+                ],
+              ),
+            ),
           );
         },
       ),
@@ -2425,7 +3355,10 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
       if (_showOutstandingOnly && customer.totalOutstanding <= 0.009) {
         return false;
       }
-      return customer.totalAdvance > 0.009 || customer.totalOutstanding > 0.009;
+      if (!_showAllCustomers) {
+        return customer.totalAdvance > 0.009 || customer.totalOutstanding > 0.009;
+      }
+      return true;
     }).toList();
 
 
@@ -2587,6 +3520,28 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       FilterChip(
+                        avatar: Icon(
+                          _showAllCustomers ? Icons.people_alt : Icons.people_outline,
+                          size: 16,
+                          color: _showAllCustomers ? const Color(0xFF2563EB) : Colors.grey.shade600,
+                        ),
+                        label: const Text('Show All Customers'),
+                        selected: _showAllCustomers,
+                        selectedColor: const Color(0xFFEFF6FF),
+                        checkmarkColor: const Color(0xFF2563EB),
+                        labelStyle: TextStyle(
+                          color: _showAllCustomers ? const Color(0xFF2563EB) : Colors.grey.shade700,
+                          fontWeight: _showAllCustomers ? FontWeight.bold : FontWeight.normal,
+                          fontSize: 12,
+                        ),
+                        onSelected: (val) {
+                          setState(() {
+                            _showAllCustomers = val;
+                          });
+                          _loadCurrentTab();
+                        },
+                      ),
+                      FilterChip(
                         label: const Text('Hide Paid Customers'),
                         selected: _showOutstandingOnly,
                         selectedColor: const Color(0xFFEFF6FF),
@@ -2662,109 +3617,125 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Header Customer Row
-                          Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 24,
-                                backgroundColor: const Color(0xFFEFF6FF),
-                                child: Text(
-                                  initials,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF2563EB),
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      customer.customerName,
+                          // Header Customer Row (Clickable for full ledger)
+                          InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: () => _showCustomerLedgerDialog(customer),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 24,
+                                    backgroundColor: const Color(0xFFEFF6FF),
+                                    child: Text(
+                                      initials,
                                       style: const TextStyle(
                                         fontWeight: FontWeight.bold,
+                                        color: Color(0xFF2563EB),
                                         fontSize: 16,
-                                        color: Color(0xFF1E293B),
                                       ),
                                     ),
-                                    const SizedBox(height: 2),
-                                    Row(
+                                  ),
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Icon(Icons.phone, size: 12, color: Colors.grey.shade500),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          customer.customerPhone,
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            color: Colors.grey.shade600,
-                                          ),
+                                        Row(
+                                          children: [
+                                            Flexible(
+                                              child: Text(
+                                                customer.customerName,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 16,
+                                                  color: Color(0xFF1E293B),
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: Colors.grey),
+                                          ],
                                         ),
+                                        const SizedBox(height: 2),
+                                        Row(
+                                          children: [
+                                            Icon(Icons.phone, size: 12, color: Colors.grey.shade500),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              customer.customerPhone,
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        if (customer.customerGstin.trim().isNotEmpty) ...[
+                                          const SizedBox(height: 4),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFF1F5F9),
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              'GST: ${customer.customerGstin}',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.grey.shade700,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ],
                                     ),
-                                    if (customer.customerGstin.trim().isNotEmpty) ...[
-                                      const SizedBox(height: 4),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFF1F5F9),
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                        child: Text(
-                                          'GST: ${customer.customerGstin}',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: Colors.grey.shade700,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                              // Balance Summary on Right
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Text(
-                                        'Outstanding: ',
-                                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                                      ),
-                                      Text(
-                                        _money(customer.totalOutstanding),
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                          color: hasOutstanding ? const Color(0xFFEF4444) : Colors.grey.shade800,
-                                        ),
-                                      ),
-                                    ],
                                   ),
-                                  const SizedBox(height: 4),
-                                  Row(
+                                  // Balance Summary on Right
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
                                     children: [
-                                      Text(
-                                        'Advance: ',
-                                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                      Row(
+                                        children: [
+                                          Text(
+                                            'Outstanding: ',
+                                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                          ),
+                                          Text(
+                                            _money(customer.totalOutstanding),
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.bold,
+                                              color: hasOutstanding ? const Color(0xFFEF4444) : Colors.grey.shade800,
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                      Text(
-                                        _money(customer.totalAdvance),
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFF16A34A),
-                                        ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          Text(
+                                            'Advance: ',
+                                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                          ),
+                                          Text(
+                                            _money(customer.totalAdvance),
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF16A34A),
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
                                 ],
                               ),
-                            ],
+                            ),
                           ),
                           const SizedBox(height: 16),
                           const Divider(height: 1),
@@ -2775,6 +3746,18 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                             spacing: 12,
                             runSpacing: 10,
                             children: [
+                              FilledButton.tonalIcon(
+                                onPressed: () => _showCustomerLedgerDialog(customer),
+                                icon: const Icon(Icons.receipt_long_rounded, size: 16),
+                                label: const Text('Complete Ledger'),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xFFEFF6FF),
+                                  foregroundColor: const Color(0xFF1D4ED8),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                              ),
                               (() {
                                 final nonSubAdvance = customer.advances.where((e) {
                                   if (e.availableAmount <= 0.009) return false;
@@ -2918,11 +3901,23 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                                     children: [
                                                       Row(
                                                         children: [
-                                                          Text(
-                                                            bill.billNo,
-                                                            style: const TextStyle(
-                                                              fontWeight: FontWeight.bold,
-                                                              fontSize: 14,
+                                                          InkWell(
+                                                            onTap: () => _showSaleBillPreviewDialog(bill.billNo, customer: customer),
+                                                            child: Row(
+                                                              mainAxisSize: MainAxisSize.min,
+                                                              children: [
+                                                                Text(
+                                                                  bill.billNo,
+                                                                  style: const TextStyle(
+                                                                    fontWeight: FontWeight.bold,
+                                                                    fontSize: 14,
+                                                                    color: Color(0xFF2563EB),
+                                                                    decoration: TextDecoration.underline,
+                                                                  ),
+                                                                ),
+                                                                const SizedBox(width: 4),
+                                                                const Icon(Icons.visibility_outlined, size: 15, color: Color(0xFF2563EB)),
+                                                              ],
                                                             ),
                                                           ),
                                                           const SizedBox(width: 8),
@@ -2978,6 +3973,12 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                             Row(
                                               mainAxisAlignment: MainAxisAlignment.end,
                                               children: [
+                                                TextButton.icon(
+                                                  onPressed: () => _showSaleBillPreviewDialog(bill.billNo, customer: customer),
+                                                  icon: const Icon(Icons.visibility_outlined, size: 14, color: Color(0xFF2563EB)),
+                                                  label: const Text('View Bill', style: TextStyle(fontSize: 12, color: Color(0xFF2563EB))),
+                                                ),
+                                                const SizedBox(width: 8),
                                                 TextButton.icon(
                                                   onPressed: () => _showRepaymentDialog(bill),
                                                   icon: const Icon(Icons.payment, size: 14),
