@@ -11917,23 +11917,29 @@ class _SaleScreenState extends State<SaleScreen> {
                   final double sgst = invoice.totalTax / 2;
                   return [
                     _summaryRow(subTotalLabel, invoice.subTotal, subtitle: subTotalNote),
-                    _summaryRow(
-                      _getDiscountLabel(invoice),
-                      invoice.totalDiscount.clamp(0.0, invoice.subTotal),
-                    ),
+                    if (invoice.totalDiscount > 0.009)
+                      _summaryRow(
+                        _getDiscountLabel(invoice),
+                        invoice.totalDiscount.clamp(0.0, invoice.subTotal),
+                        compact: true,
+                      ),
                     if (allInclusive)
-                      _summaryRow('Net Amount (Tax Incl.)', (invoice.subTotal - invoice.totalDiscount).clamp(0.0, double.infinity)),
-                    _summaryRow('Taxable Value', invoice.taxableAmount),
+                      _summaryRow(
+                        'Net Amount (Tax Incl.)',
+                        (invoice.subTotal - invoice.totalDiscount).clamp(0.0, double.infinity),
+                        compact: true,
+                      ),
+                    _summaryRow('Taxable Value', invoice.taxableAmount, compact: true),
                     if (invoice.chargeTotal > 0)
-                      _summaryRow('Charges', invoice.chargeTotal),
+                      _summaryRow('Charges', invoice.chargeTotal, compact: true),
                     if (invoice.taxSummary.isNotEmpty)
                       for (final tax in invoice.taxSummary)
-                        _summaryRow(tax.label, tax.taxAmount)
+                        _summaryRow(tax.label, tax.taxAmount, compact: true)
                     else if (invoice.totalTax > 0)
-                      _summaryRow('Total Tax', invoice.totalTax),
+                      _summaryRow('Total Tax', invoice.totalTax, compact: true),
                   ];
                 })(),
-                const Divider(height: 18),
+                const Divider(height: 14),
                 _summaryRow('Total', _payableInvoiceTotal, emphasized: true),
               ],
             ),
@@ -13169,41 +13175,57 @@ class _SaleScreenState extends State<SaleScreen> {
     return _surfaceCard(
       child: Column(
         children: [
-          _summaryRow('Total Qty', invoice.totalQty),
-          _summaryRow('Sub Total', invoice.subTotal),
+          _summaryRow('Total Qty', invoice.totalQty, compact: true),
+          _summaryRow('Sub Total', invoice.subTotal, compact: true),
           if (_subscriptionItemAdvanceDiscount > 0)
             _summaryRow(
-                'Subscription Item Discount', _subscriptionItemAdvanceDiscount),
-          _summaryRow('Scheme Savings', _totalSchemeSavingsAmount),
-          _summaryRow(
-            _getDiscountLabel(invoice),
-            _manualDiscountAmount,
-          ),
+                'Subscription Item Discount', _subscriptionItemAdvanceDiscount,
+                compact: true),
+          if (_totalSchemeSavingsAmount > 0)
+            _summaryRow('Scheme Savings', _totalSchemeSavingsAmount,
+                compact: true),
+          if (_manualDiscountAmount > 0)
+            _summaryRow(
+              _getDiscountLabel(invoice),
+              _manualDiscountAmount,
+              compact: true,
+            ),
           if (_loyaltyDiscountAmount > 0)
-            _summaryRow('Loyalty Discount', _loyaltyDiscountAmount),
-          _summaryRow('Charges', invoice.chargeTotal),
-          _summaryRow(
-            invoice.taxableAmount > 0 && invoice.totalTax > 0
-                ? 'Tax (${((invoice.totalTax / invoice.taxableAmount) * 100).toStringAsFixed(((invoice.totalTax / invoice.taxableAmount) * 100) % 1 == 0 ? 0 : 1)}%)'
-                : 'Tax',
-            invoice.totalTax,
-          ),
-          const Divider(height: 24),
+            _summaryRow('Loyalty Discount', _loyaltyDiscountAmount,
+                compact: true),
+          if (invoice.chargeTotal > 0)
+            _summaryRow('Charges', invoice.chargeTotal, compact: true),
+          if (invoice.totalTax > 0)
+            _summaryRow(
+              invoice.taxableAmount > 0
+                  ? 'Tax (${((invoice.totalTax / invoice.taxableAmount) * 100).toStringAsFixed(((invoice.totalTax / invoice.taxableAmount) * 100) % 1 == 0 ? 0 : 1)}%)'
+                  : 'Tax',
+              invoice.totalTax,
+              compact: true,
+            ),
+          const Divider(height: 14),
           _summaryRow('Total', _payableInvoiceTotal, emphasized: true),
         ],
       ),
     );
   }
 
-  Widget _summaryRow(String label, double value,
-      {bool emphasized = false, Color? labelColor, Color? valueColor, String? subtitle}) {
+  Widget _summaryRow(
+    String label,
+    double value, {
+    bool emphasized = false,
+    bool compact = false,
+    Color? labelColor,
+    Color? valueColor,
+    String? subtitle,
+  }) {
     final style = TextStyle(
       fontWeight: emphasized ? FontWeight.w800 : FontWeight.w600,
-      fontSize: emphasized ? 20 : 14,
+      fontSize: emphasized ? 18 : (compact ? 13 : 14),
       color: const Color(0xFF0F172A),
     );
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: EdgeInsets.symmetric(vertical: compact ? 2 : (emphasized ? 4 : 3)),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -13216,7 +13238,7 @@ class _SaleScreenState extends State<SaleScreen> {
                   style: style.copyWith(color: labelColor),
                 ),
                 if (subtitle != null && subtitle.isNotEmpty) ...[
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 1),
                   Text(
                     subtitle,
                     style: const TextStyle(

@@ -424,7 +424,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
   bool get _showRetailSalesSection => true;
   bool get _showRetailSalesReportSection => true;
   String get _dashboardTitle {
-    final clientName = (property?.propertyName ?? user?.propertyName ?? '').trim();
+    final clientName = (property?.propertyName ?? propertyCtrl.data?.propertyName ?? user?.propertyName ?? '').trim();
     if (clientName.isNotEmpty) {
       return '$clientName Dashboard';
     }
@@ -1777,7 +1777,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
   Future<void> _loadPropertyInfo() async {
     await propertyCtrl.load();
     property = propertyCtrl.data;
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   Future<void> loadUser() async {
@@ -3427,7 +3427,22 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
     final userName = user?.username ?? "";
     final userRole = user?.role ?? "";
     final userEmail = user?.name ?? "";
-    final hotelName = user?.propertyName ?? "";
+    PropertyInfo? propInfo;
+    try {
+      propInfo = Provider.of<PropertyInfoController>(context).data;
+    } catch (_) {
+      propInfo = property ?? propertyCtrl.data;
+    }
+    final propertyDisplayName = (propInfo?.propertyName.trim().isNotEmpty == true)
+        ? propInfo!.propertyName.trim()
+        : ((property?.propertyName.trim().isNotEmpty == true)
+            ? property!.propertyName.trim()
+            : ((propertyCtrl.data?.propertyName.trim().isNotEmpty == true)
+                ? propertyCtrl.data!.propertyName.trim()
+                : (user?.propertyName?.trim().isNotEmpty == true
+                    ? user!.propertyName!.trim()
+                    : '')));
+    final hotelName = propertyDisplayName;
 
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -3726,14 +3741,20 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
         'icon': Icons.business_outlined,
         'label': 'Property Information',
         'permission': 'PROPERTY_INFORMATION',
-        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PropertyInfoScreen(outletid: 0))),
+        'onTap': () async {
+          await Navigator.push(context, MaterialPageRoute(builder: (_) => const PropertyInfoScreen(outletid: 0)));
+          _loadPropertyInfo();
+        },
       },
       {
         'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
         'icon': Icons.edit_location_alt_outlined,
         'label': 'Outlet Detail Modification',
         'permission': 'PROPERTY_INFORMATION',
-        'onTap': () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OutletDetailModificationScreen())),
+        'onTap': () async {
+          await Navigator.push(context, MaterialPageRoute(builder: (_) => const OutletDetailModificationScreen()));
+          _loadPropertyInfo();
+        },
       },
       {
         'category': _isHospitalityBusiness ? 'Masters & Departments' : 'Masters',
@@ -4658,7 +4679,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen>
                   padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 4.0),
                   child: Row(
                     children: [
-                      _buildDrawerHeaderLogoWidget(property?.logoPath, 56),
+                      _buildDrawerHeaderLogoWidget(propInfo?.logoPath ?? property?.logoPath, 56),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(

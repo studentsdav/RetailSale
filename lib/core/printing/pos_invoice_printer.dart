@@ -21,6 +21,7 @@ import '../../controllers/settings/system_settings_controller.dart';
 import '../../controllers/settings/property_info_controller.dart';
 import '../currency/currency_service.dart';
 import '../utils/country_tax_helper.dart';
+import '../billing/pos_billing_engine.dart';
 
 class PosInvoicePrinter {
   PosInvoicePrinter._();
@@ -159,6 +160,7 @@ class PosInvoicePrinter {
         'Goods once sold will not be taken back or exchanged.',
     String thankYouMessage = 'Thank you for your business.',
     String authorizedSignatureLabel = 'Authorized Signatory',
+    SystemSettings? settings,
   }) async {
     final pdfBytes = await buildSaleInvoicePdf(
       order: order,
@@ -177,6 +179,7 @@ class PosInvoicePrinter {
       termsAndConditions: termsAndConditions,
       thankYouMessage: thankYouMessage,
       authorizedSignatureLabel: authorizedSignatureLabel,
+      settings: settings,
     );
 
     if (directPrint && printer != null) {
@@ -3189,20 +3192,7 @@ class PosInvoicePrinter {
     final grouped = <String, TaxBreakdown>{};
 
     void addTax(TaxBreakdown tax) {
-      final key = '${tax.code}|${tax.label}|${tax.rate}';
-      final existing = grouped[key];
-      if (existing == null) {
-        grouped[key] = tax;
-      } else {
-        grouped[key] = TaxBreakdown(
-          code: existing.code,
-          label: existing.label,
-          taxType: existing.taxType,
-          rate: existing.rate,
-          taxableAmount: existing.taxableAmount + tax.taxableAmount,
-          taxAmount: existing.taxAmount + tax.taxAmount,
-        );
-      }
+      PosBillingEngine.accumulateTax(grouped, tax);
     }
 
     for (final charge in order.charges) {
@@ -3444,20 +3434,7 @@ class PosInvoicePrinter {
     final grouped = <String, TaxBreakdown>{};
     for (final item in order.items) {
       for (final tax in _itemTaxBreakup(order, item)) {
-        final key = '${tax.code}|${tax.label}|${tax.rate}';
-        final existing = grouped[key];
-        if (existing == null) {
-          grouped[key] = tax;
-        } else {
-          grouped[key] = TaxBreakdown(
-            code: tax.code,
-            label: tax.label,
-            taxType: tax.taxType,
-            rate: tax.rate,
-            taxableAmount: existing.taxableAmount + tax.taxableAmount,
-            taxAmount: existing.taxAmount + tax.taxAmount,
-          );
-        }
+        PosBillingEngine.accumulateTax(grouped, tax);
       }
     }
     return grouped.values.toList();

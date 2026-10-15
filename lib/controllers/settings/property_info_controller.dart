@@ -31,6 +31,7 @@ class PropertyInfoController extends ChangeNotifier {
       payload.toJson(),
     );
 
+    data = payload;
     loading = false;
     notifyListeners();
   }

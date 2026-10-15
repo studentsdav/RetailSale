@@ -215,6 +215,13 @@ class _PropertyInfoScreenState extends State<PropertyInfoScreen> {
       );
 
       await ctrl.save(payload);
+      try {
+        if (mounted) {
+          final rootCtrl = context.read<PropertyInfoController>();
+          rootCtrl.data = payload;
+          rootCtrl.notifyListeners();
+        }
+      } catch (_) {}
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

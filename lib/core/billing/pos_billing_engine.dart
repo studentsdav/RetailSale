@@ -82,20 +82,7 @@ class PosBillingEngine {
         computedItems.add(enriched);
 
         for (final tax in lineTaxes) {
-          final key = '${tax.code}_${tax.rate}';
-          final existing = taxSummary[key];
-          if (existing == null) {
-            taxSummary[key] = tax;
-          } else {
-            taxSummary[key] = TaxBreakdown(
-              code: existing.code,
-              label: existing.label,
-              taxType: existing.taxType,
-              rate: existing.rate,
-              taxableAmount: existing.taxableAmount + tax.taxableAmount,
-              taxAmount: existing.taxAmount + tax.taxAmount,
-            );
-          }
+          accumulateTax(taxSummary, tax);
         }
       } else {
         final double grossExclusive = itemAmount;
@@ -130,20 +117,7 @@ class PosBillingEngine {
         computedItems.add(enriched);
 
         for (final tax in lineTaxes) {
-          final key = '${tax.code}_${tax.rate}';
-          final existing = taxSummary[key];
-          if (existing == null) {
-            taxSummary[key] = tax;
-          } else {
-            taxSummary[key] = TaxBreakdown(
-              code: existing.code,
-              label: existing.label,
-              taxType: existing.taxType,
-              rate: existing.rate,
-              taxableAmount: existing.taxableAmount + tax.taxableAmount,
-              taxAmount: existing.taxAmount + tax.taxAmount,
-            );
-          }
+          accumulateTax(taxSummary, tax);
         }
       }
     }
@@ -212,20 +186,7 @@ class PosBillingEngine {
         ),
       );
       for (final tax in chargeTaxes) {
-        final key = '${tax.code}_${tax.rate}';
-        final existing = taxSummary[key];
-        if (existing == null) {
-          taxSummary[key] = tax;
-        } else {
-          taxSummary[key] = TaxBreakdown(
-            code: existing.code,
-            label: existing.label,
-            taxType: existing.taxType,
-            rate: existing.rate,
-            taxableAmount: existing.taxableAmount + tax.taxableAmount,
-            taxAmount: existing.taxAmount + tax.taxAmount,
-          );
-        }
+        accumulateTax(taxSummary, tax);
       }
     }
 
@@ -324,7 +285,7 @@ class PosBillingEngine {
         return [
           TaxBreakdown(
             code: 'VAT',
-            label: 'VAT ${_fmt(taxPercent)}%',
+            label: 'VAT (${_fmt(taxPercent)}%)',
             taxType: 'VAT',
             rate: taxPercent,
             taxableAmount: taxableAmount,
@@ -340,7 +301,7 @@ class PosBillingEngine {
         return [
           TaxBreakdown(
             code: 'VAT',
-            label: 'VAT ${_fmt(vatRate)}%',
+            label: 'VAT (${_fmt(vatRate)}%)',
             taxType: 'VAT',
             rate: vatRate,
             taxableAmount: taxableAmount,
@@ -348,7 +309,7 @@ class PosBillingEngine {
           ),
           TaxBreakdown(
             code: 'CTL',
-            label: 'CTL ${_fmt(ctlRate)}%',
+            label: 'CTL (${_fmt(ctlRate)}%)',
             taxType: 'CTL',
             rate: ctlRate,
             taxableAmount: taxableAmount,
@@ -359,7 +320,7 @@ class PosBillingEngine {
         return [
           TaxBreakdown(
             code: 'CESS',
-            label: 'CESS ${_fmt(taxPercent)}%',
+            label: 'CESS (${_fmt(taxPercent)}%)',
             taxType: 'CESS',
             rate: taxPercent,
             taxableAmount: taxableAmount,
@@ -443,7 +404,7 @@ class PosBillingEngine {
           return [
             TaxBreakdown(
               code: 'IGST',
-              label: 'IGST ${_fmt(taxPercent)}%',
+              label: 'IGST (${_fmt(taxPercent)}%)',
               taxType: 'GST',
               rate: taxPercent,
               taxableAmount: taxableAmount,
@@ -455,7 +416,7 @@ class PosBillingEngine {
           return [
             TaxBreakdown(
               code: 'VAT',
-              label: 'VAT ${_fmt(taxPercent)}%',
+              label: 'VAT (${_fmt(taxPercent)}%)',
               taxType: 'VAT',
               rate: taxPercent,
               taxableAmount: taxableAmount,
@@ -480,7 +441,7 @@ class PosBillingEngine {
         return [
           TaxBreakdown(
             code: 'CGST',
-            label: 'CGST ${_fmt(halfRate)}%',
+            label: 'CGST (${_fmt(halfRate)}%)',
             taxType: 'GST',
             rate: halfRate,
             taxableAmount: taxableAmount,
@@ -488,13 +449,45 @@ class PosBillingEngine {
           ),
           TaxBreakdown(
             code: 'SGST',
-            label: 'SGST ${_fmt(halfRate)}%',
+            label: 'SGST (${_fmt(halfRate)}%)',
             taxType: 'GST',
             rate: halfRate,
             taxableAmount: taxableAmount,
             taxAmount: halfAmount,
           ),
         ];
+    }
+  }
+
+  static String canonicalTaxKey(TaxBreakdown tax) {
+    final rawLabel = tax.label.trim();
+    final baseName = rawLabel
+        .replaceAll(RegExp(r'\s*\(\s*\d+(\.\d+)?%\s*\)', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\s*\b\d+(\.\d+)?%\s*$', caseSensitive: false), '')
+        .trim()
+        .toUpperCase();
+    final name = baseName.isNotEmpty
+        ? baseName
+        : (tax.code.trim().isNotEmpty ? tax.code.trim().toUpperCase() : 'TAX');
+    final rateKey = (tax.rate * 1000).round() / 1000;
+    return '${name}_$rateKey';
+  }
+
+  static void accumulateTax(Map<String, TaxBreakdown> taxSummary, TaxBreakdown tax) {
+    if (tax.taxAmount.abs() < 0.0001 && tax.taxableAmount.abs() < 0.0001) return;
+    final key = canonicalTaxKey(tax);
+    final existing = taxSummary[key];
+    if (existing == null) {
+      taxSummary[key] = tax;
+    } else {
+      taxSummary[key] = TaxBreakdown(
+        code: existing.code,
+        label: existing.label,
+        taxType: existing.taxType,
+        rate: existing.rate,
+        taxableAmount: existing.taxableAmount + tax.taxableAmount,
+        taxAmount: existing.taxAmount + tax.taxAmount,
+      );
     }
   }
 

@@ -19,6 +19,7 @@ import '../../core/currency/currency_service.dart';
 import 'credit_analysis_screen.dart';
 import 'expense_analytics_screen.dart';
 import '../../controllers/settings/property_info_controller.dart';
+import '../../controllers/settings/system_settings_controller.dart';
 import '../../controllers/inventory/stock_transfer_controller.dart';
 import '../../core/printing/pos_invoice_printer.dart';
 import '../../utils/branding_storage.dart';
@@ -1355,7 +1356,14 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
             try {
               final res = await ApiClient.get('${ApiEndpoints.sales}/${b.saleId}');
               if (res != null && res['success'] == true && res['data'] != null && res['data'] is Map) {
-                return Map<String, dynamic>.from(res['data']);
+                final map = Map<String, dynamic>.from(res['data']);
+                if (map['bill_format'] == null || map['bill_format'].toString().trim().isEmpty) {
+                  final sysFormat = SystemSettingsController().settings?.billFormat;
+                  if (sysFormat != null && sysFormat.isNotEmpty) {
+                    map['bill_format'] = sysFormat;
+                  }
+                }
+                return map;
               }
             } catch (_) {}
           }
@@ -1366,7 +1374,14 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
     try {
       final res = await ApiClient.get('${ApiEndpoints.sales}/${Uri.encodeComponent(cleanNo)}');
       if (res != null && res['success'] == true && res['data'] != null && res['data'] is Map) {
-        return Map<String, dynamic>.from(res['data']);
+        final map = Map<String, dynamic>.from(res['data']);
+        if (map['bill_format'] == null || map['bill_format'].toString().trim().isEmpty) {
+          final sysFormat = SystemSettingsController().settings?.billFormat;
+          if (sysFormat != null && sysFormat.isNotEmpty) {
+            map['bill_format'] = sysFormat;
+          }
+        }
+        return map;
       }
     } catch (_) {}
 
@@ -1375,9 +1390,11 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
         final bNo = b.billNo.trim().toUpperCase();
         final cNo = cleanNo.toUpperCase();
         if (bNo == cNo || bNo.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '') == cNo.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')) {
+          final sysFormat = SystemSettingsController().settings?.billFormat ?? 'THERMAL_80';
           return {
             'sale_no': b.billNo,
             'sale_date': b.billDate.toIso8601String(),
+            'bill_format': sysFormat,
             'status': b.paymentStatus.isNotEmpty ? b.paymentStatus : 'COMPLETED',
             'payment_mode': 'CREDIT',
             'customer_name': customer.customerName,
@@ -3589,7 +3606,8 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
               else
                 ...customers.map((customer) {
                   final hasOutstanding = customer.totalOutstanding > 0.009;
-                  final unpaidBills = customer.bills.where((b) => b.outstanding > 0.009).toList();
+                  final unpaidBills = customer.bills.where((b) => b.outstanding > 0.009).toList()
+                    ..sort((a, b) => b.billDate.compareTo(a.billDate));
                   final isBillsExpanded = _expandedBillsCustomers.contains(customer.customerPhone);
                   final isAdvancesExpanded = _expandedAdvancesCustomers.contains(customer.customerPhone);
 

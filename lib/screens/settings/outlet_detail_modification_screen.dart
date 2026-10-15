@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../controllers/settings/property_info_controller.dart';
 import '../../core/api/api_client.dart';
@@ -461,6 +462,13 @@ class _OutletDetailModificationScreenState extends State<OutletDetailModificatio
       );
 
       await ctrl.save(payload);
+      try {
+        if (mounted) {
+          final rootCtrl = context.read<PropertyInfoController>();
+          rootCtrl.data = payload;
+          rootCtrl.notifyListeners();
+        }
+      } catch (_) {}
       if (!mounted) return;
 
       setState(() {

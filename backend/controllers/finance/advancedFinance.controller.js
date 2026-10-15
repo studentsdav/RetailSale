@@ -427,6 +427,14 @@ function buildLedgerWhere(outlet_id, query) {
     return where;
 }
 
+function getLedgerEntryDelta(entry) {
+    const type = String(entry?.transaction_type || '').toUpperCase();
+    if (type === 'SALE_CREDIT' || type === 'SUBSCRIPTION_SETTLEMENT_CREDIT' || type === 'SUBSCRIPTION_SETTLEMENT_PARTIAL') {
+        return 0;
+    }
+    return roundAmount(toAmount(entry?.amount_in) - toAmount(entry?.amount_out) + toAmount(entry?.adjustment_amount));
+}
+
 function buildDailyLedgerGroups(entries, openingMap, startingOpening) {
     const groups = [];
     let current = null;
@@ -436,17 +444,23 @@ function buildDailyLedgerGroups(entries, openingMap, startingOpening) {
         const key = dateKey(entry.txn_date);
         if (!current || current.date !== key) {
             if (current) {
-                current.closing_balance = current.entries[current.entries.length - 1].balance;
                 carry = current.closing_balance;
                 groups.push(current);
             }
 
+            const openingForDay = openingMap.has(key) ? (openingMap.get(key) ?? carry) : carry;
             current = {
                 date: key,
-                opening_balance: openingMap.get(key) ?? carry,
-                closing_balance: openingMap.get(key) ?? carry,
+                opening_balance: openingForDay,
+                closing_balance: openingForDay,
                 entries: []
             };
+        }
+
+        const delta = getLedgerEntryDelta(entry);
+        current.closing_balance = roundAmount(current.closing_balance + delta);
+        if (entry.balance !== undefined) {
+            entry.balance = current.closing_balance;
         }
 
         current.entries.push({
@@ -461,13 +475,12 @@ function buildDailyLedgerGroups(entries, openingMap, startingOpening) {
             amount_in: toAmount(entry.amount_in),
             amount_out: toAmount(entry.amount_out),
             adjustment_amount: toAmount(entry.adjustment_amount),
-            balance: toAmount(entry.balance),
+            balance: current.closing_balance,
             notes: entry.notes || ''
         });
     }
 
     if (current) {
-        current.closing_balance = current.entries[current.entries.length - 1].balance;
         groups.push(current);
     }
 
@@ -2287,7 +2300,6 @@ exports.getLedgerReport = async (req, res) => {
             return sum + toAmount(entry.amount_in);
         }, 0);
         const totalOut = entries.reduce((sum, entry) => sum + toAmount(entry.amount_out), 0);
-        const closingBalance = entries.length > 0 ? toAmount(entries[entries.length - 1].balance) : openingBalance;
         const paymentMethodSummary = entries.reduce((acc, entry) => {
             const key = String(entry.payment_method || 'UNKNOWN').trim().toUpperCase() || 'UNKNOWN';
             if (!acc[key]) {
@@ -2303,7 +2315,6 @@ exports.getLedgerReport = async (req, res) => {
             acc[key].count += 1;
             return acc;
         }, {});
-
         const openingRows = await req.propertyDb.models.daily_opening_balances.findAll({
             where: {
                 outlet_id,
@@ -2315,7 +2326,13 @@ exports.getLedgerReport = async (req, res) => {
         for (const op of openingRows) {
             openingMap.set(dateKey(op.balance_date), toAmount(op.opening_balance));
         }
-        let daily = buildDailyLedgerGroups(entries, openingMap, openingBalance)
+
+        const dailyGroups = buildDailyLedgerGroups(entries, openingMap, openingBalance);
+        const closingBalance = dailyGroups.length > 0
+            ? dailyGroups[dailyGroups.length - 1].closing_balance
+            : openingBalance;
+
+        let daily = dailyGroups
             .map((group) => ({
                 ...group,
                 date: dateKey(group.date),
@@ -2733,6 +2750,8 @@ exports.getCustomerLedger = async (req, res) => {
                 notes: tx.notes
             };
         });
+
+        transactions.reverse();
 
         const custName = customerProfile?.customer_name || sales[0]?.customer_name || advances[0]?.customer_name || search;
         const custPhone = customerProfile?.customer_phone || sales[0]?.customer_phone || advances[0]?.customer_phone || customerPhone;

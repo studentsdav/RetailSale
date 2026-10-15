@@ -398,9 +398,10 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   }
 
   bool _isTaxedItem(SalesReportItem item) {
-    if (item.taxAmount > 0.009 || item.taxableAmount > 0.009) return true;
+    if (item.taxAmount > 0.009) return true;
     if (item.taxPercent > 0.009) return true;
-    if (item.taxBreakup.any((t) => t.rate > 0 || t.taxAmount.abs() > 0.009)) return true;
+    if (_itemTaxRate(item) > 0.009) return true;
+    if (item.taxBreakup.any((t) => t.rate > 0.009 || t.taxAmount.abs() > 0.009)) return true;
     return false;
   }
 

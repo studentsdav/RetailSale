@@ -57,11 +57,11 @@ function addDays(value, days) {
 }
 
 function entryDelta(entry) {
-    const type = String(entry.transaction_type || '').toUpperCase();
+    const type = String(entry?.transaction_type || '').toUpperCase();
     if (type === 'SALE_CREDIT' || type === 'SUBSCRIPTION_SETTLEMENT_CREDIT' || type === 'SUBSCRIPTION_SETTLEMENT_PARTIAL') {
         return 0;
     }
-    return roundAmount(entry.amount_in) - roundAmount(entry.amount_out) + roundAmount(entry.adjustment_amount);
+    return roundAmount(entry?.amount_in ?? 0) - roundAmount(entry?.amount_out ?? 0) + roundAmount(entry?.adjustment_amount ?? 0);
 }
 
 async function getLatestManualOpeningBefore({
@@ -447,7 +447,7 @@ async function batchCreateLedgerEntries({ db, outlet_id, entries, transaction })
     // 2 — Compute running balances in memory
     const rows = entries.map(e => {
         const normalizedTxnDate = dateKey(e.txn_date ?? new Date());
-        const delta = roundAmount(e.amount_in ?? 0) - roundAmount(e.amount_out ?? 0) + roundAmount(e.adjustment_amount ?? 0);
+        const delta = entryDelta(e);
         runningBalance = roundAmount(runningBalance + delta);
         return {
             outlet_id,

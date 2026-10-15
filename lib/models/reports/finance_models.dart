@@ -247,10 +247,12 @@ class CreditCustomerReport {
           double.tryParse((json['total_advance'] ?? 0).toString()) ?? 0,
       bills: (json['bills'] as List? ?? const [])
           .map((e) => CreditBill.fromJson(Map<String, dynamic>.from(e)))
-          .toList(),
+          .toList()
+        ..sort((a, b) => b.billDate.compareTo(a.billDate)),
       advances: (json['advances'] as List? ?? const [])
           .map((e) => AdvanceEntry.fromJson(Map<String, dynamic>.from(e)))
-          .toList(),
+          .toList()
+        ..sort((a, b) => b.advanceDate.compareTo(a.advanceDate)),
     );
   }
 }
@@ -820,7 +822,8 @@ class CustomerLedgerReport {
     final summary = json['summary'] as Map<String, dynamic>? ?? {};
     final txns = (json['transactions'] as List? ?? const [])
         .map((e) => CustomerLedgerEntry.fromJson(Map<String, dynamic>.from(e)))
-        .toList();
+        .toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
 
     return CustomerLedgerReport(
       customerName: (cust['customer_name'] ?? '').toString(),

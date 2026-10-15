@@ -2613,7 +2613,8 @@ function buildSalePaymentLedgerEntries({
             party_name: header.customer_name || header.customer_phone || 'Walk-in Customer',
             payment_method: 'CREDIT',
             amount_in: 0,
-            adjustment_amount: finalCreditAmount,
+            amount_out: 0,
+            adjustment_amount: 0,
             notes: `Sale ${sale.sale_no} created with outstanding ${finalCreditAmount.toFixed(2)}`,
             created_by
         });
@@ -5026,7 +5027,7 @@ exports.updateSalePaymentMode = async (req, res) => {
                 party_name: resolvedPartyName,
                 payment_method: 'CREDIT',
                 amount_in: 0,
-                adjustment_amount: balanceDue,
+                adjustment_amount: 0,
                 notes: `Sale ${sale.sale_no} payment updated with outstanding ${balanceDue.toFixed(2)}`,
                 created_by: req.user.id,
                 transaction: t
@@ -5231,7 +5232,7 @@ exports.settleRunningBill = async (req, res) => {
                 party_name: resolvedPartyName,
                 payment_method: 'CREDIT',
                 amount_in: 0,
-                adjustment_amount: balanceDue,
+                adjustment_amount: 0,
                 notes: `Direct Settlement for Sale ${sale.sale_no} with outstanding ${balanceDue.toFixed(2)}`,
                 created_by: req.user.id,
                 transaction: t
