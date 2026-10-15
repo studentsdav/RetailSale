@@ -68,7 +68,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
   final openingNoteCtrl = TextEditingController();
   final alertDaysCtrl = TextEditingController(text: '7');
 
-  String ledgerType = '';
+    String ledgerType = '';
   String ledgerPaymentMethod = '';
   String deliveryStatus = '';
   String expiryStatus = 'ALL';
@@ -135,8 +135,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
           children: [
             const Icon(Icons.storefront, color: Colors.blue),
             const SizedBox(width: 10),
-            const Text('Finance View Scope:',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const Text('Finance View Scope:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             const SizedBox(width: 14),
             Expanded(
               child: DropdownButtonHideUnderline(
@@ -146,18 +145,14 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   items: [
                     const DropdownMenuItem<int?>(
                       value: -1,
-                      child: Text('🌐 All Linked Outlets (Combined Finance)',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 13)),
+                      child: Text('🌐 All Linked Outlets (Combined Finance)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     ),
                     ...outlets.map<DropdownMenuItem<int?>>((o) {
                       return DropdownMenuItem<int?>(
                         value: o['id'],
-                        child: Text(
-                            '🏬 ${o['outlet_name']} (${o['outlet_code']})',
-                            style: const TextStyle(fontSize: 13)),
+                        child: Text('🏬 ${o['outlet_name']} (${o['outlet_code']})', style: const TextStyle(fontSize: 13)),
                       );
-                    }),
+                    }).toList(),
                   ],
                   onChanged: (val) {
                     setState(() {
@@ -202,7 +197,6 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
     }
     return DateFormat('dd-MMM-yyyy hh:mm a').format(local);
   }
-
   String _money(double value) => CurrencyService.format(value);
   String _plainAmount(double value) => value.toStringAsFixed(2);
   List<LedgerDayGroup> get _ledgerDaysAsc {
@@ -210,11 +204,9 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
     days.sort((a, b) => a.date.compareTo(b.date));
     return days;
   }
-
   double get _ledgerOutstandingGrandTotal => _ledgerDaysAsc.fold<double>(
         0,
-        (sum, day) =>
-            sum +
+        (sum, day) => sum +
             day.entries.fold<double>(
               0,
               (entrySum, entry) => entrySum + _ledgerOutstanding(entry),
@@ -225,9 +217,8 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
         (sum, day) =>
             sum +
             day.entries.fold<double>(0, (entrySum, entry) {
-              final isCreditMode =
-                  entry.transactionType.trim().toUpperCase() == 'SALE_CREDIT' ||
-                      entry.paymentMethod.trim().toUpperCase() == 'CREDIT';
+              final isCreditMode = entry.transactionType.trim().toUpperCase() == 'SALE_CREDIT' ||
+                  entry.paymentMethod.trim().toUpperCase() == 'CREDIT';
               return entrySum + (isCreditMode ? 0.0 : entry.amountIn);
             }),
       );
@@ -238,13 +229,9 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
             day.entries.fold<double>(
               0,
               (entrySum, entry) {
-                final isCreditMode =
-                    entry.transactionType.trim().toUpperCase() ==
-                            'SALE_CREDIT' ||
-                        entry.paymentMethod.trim().toUpperCase() == 'CREDIT';
-                final rawDebit = entry.amountOut > 0
-                    ? entry.amountOut
-                    : entry.adjustmentAmount;
+                final isCreditMode = entry.transactionType.trim().toUpperCase() == 'SALE_CREDIT' ||
+                    entry.paymentMethod.trim().toUpperCase() == 'CREDIT';
+                final rawDebit = entry.amountOut > 0 ? entry.amountOut : entry.adjustmentAmount;
                 return entrySum + (isCreditMode ? 0.0 : rawDebit);
               },
             ),
@@ -341,12 +328,9 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Confirm Delete'),
-        content: const Text(
-            'Are you sure you want to delete this expense? This will also remove the cash ledger entry.'),
+        content: const Text('Are you sure you want to delete this expense? This will also remove the cash ledger entry.'),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
@@ -445,8 +429,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                       ),
                       const SizedBox(height: 2),
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
                           color: const Color(0xFF0B5CAD).withOpacity(0.1),
                           borderRadius: BorderRadius.circular(4),
@@ -469,17 +452,13 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   children: [
                     Text('Voucher No: $voucherNo',
                         style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF0B5CAD))),
+                            fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0B5CAD))),
                     Text('Date: $dateStr',
-                        style: const TextStyle(
-                            fontSize: 11, fontWeight: FontWeight.w600)),
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
                   ],
                 ),
                 const SizedBox(height: 6),
-                Text(
-                    'Party / Account: ${partyName.isNotEmpty ? partyName : 'General Account'}',
+                Text('Party / Account: ${partyName.isNotEmpty ? partyName : 'General Account'}',
                     style: const TextStyle(fontSize: 12)),
                 Text('Payment Mode: $paymentMode',
                     style: const TextStyle(fontSize: 12)),
@@ -508,9 +487,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   const SizedBox(height: 10),
                   Text('Narration / Note: $note',
                       style: const TextStyle(
-                          fontSize: 11,
-                          fontStyle: FontStyle.italic,
-                          color: Colors.black87)),
+                          fontSize: 11, fontStyle: FontStyle.italic, color: Colors.black87)),
                 ],
               ],
             ),
@@ -535,8 +512,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
             },
             icon: const Icon(Icons.print, color: Colors.white, size: 16),
             label: const Text('Print Voucher Receipt',
-                style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -545,9 +521,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
 
   void _onLedgerRowTapped(CashLedgerEntry entry) async {
     final vNo = _getVoucherNo(entry);
-    final amt = entry.amountOut > 0
-        ? entry.amountOut
-        : (entry.amountIn > 0 ? entry.amountIn : entry.adjustmentAmount);
+    final amt = entry.amountOut > 0 ? entry.amountOut : (entry.amountIn > 0 ? entry.amountIn : entry.adjustmentAmount);
 
     showModalBottomSheet(
       context: context,
@@ -563,11 +537,9 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.receipt_long_outlined,
-                    color: Colors.indigo),
+                leading: const Icon(Icons.receipt_long_outlined, color: Colors.indigo),
                 title: Text('Voucher No: $vNo'),
-                subtitle: Text(
-                    'Type: ${entry.transactionType} • Amount: ${_money(amt)}'),
+                subtitle: Text('Type: ${entry.transactionType} • Amount: ${_money(amt)}'),
               ),
               const Divider(),
               ListTile(
@@ -596,19 +568,19 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
 
   Future<void> _editExpenseFromLedger(String? referenceId) async {
     if (referenceId == null || referenceId.isEmpty) return;
-
+    
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => const Center(child: CircularProgressIndicator()),
     );
-
+    
     final expense = await ctrl.fetchExpenseById(referenceId);
-
+    
     if (mounted) {
       Navigator.pop(context);
     }
-
+    
     if (expense == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -617,7 +589,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
       }
       return;
     }
-
+    
     if (mounted) {
       _showExpenseDialog(expense: expense);
     }
@@ -625,19 +597,19 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
 
   Future<void> _printExpenseFromLedger(String? referenceId) async {
     if (referenceId == null || referenceId.isEmpty) return;
-
+    
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => const Center(child: CircularProgressIndicator()),
     );
-
+    
     final expense = await ctrl.fetchExpenseById(referenceId);
-
+    
     if (mounted) {
       Navigator.pop(context);
     }
-
+    
     if (expense == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -646,7 +618,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
       }
       return;
     }
-
+    
     await ExpenseEntryDialog.printExpenseReceipt(expense);
   }
 
@@ -913,8 +885,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                 children: [
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text(bill.billNo,
-                        style: const TextStyle(fontWeight: FontWeight.bold)),
+                    title: Text(bill.billNo, style: const TextStyle(fontWeight: FontWeight.bold)),
                     subtitle: Padding(
                       padding: const EdgeInsets.only(top: 4),
                       child: Text(
@@ -922,9 +893,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: bill.outstanding > 0.009
-                              ? const Color(0xFFDC2626)
-                              : const Color(0xFF16A34A),
+                          color: bill.outstanding > 0.009 ? const Color(0xFFDC2626) : const Color(0xFF16A34A),
                         ),
                       ),
                     ),
@@ -998,13 +967,11 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                             'The entered amount ${CurrencyService.format(amount)} exceeds this bill\'s outstanding balance of ${CurrencyService.format(bill.outstanding)}.\n\nWould you like to automatically adjust the extra ${CurrencyService.format(amount - bill.outstanding)} towards other outstanding credit bills or customer advance?'),
                         actions: [
                           TextButton(
-                            onPressed: () =>
-                                Navigator.pop(ctx, false), // Cancel
+                            onPressed: () => Navigator.pop(ctx, false), // Cancel
                             child: const Text('Cancel'),
                           ),
                           FilledButton(
-                            onPressed: () =>
-                                Navigator.pop(ctx, true), // Yes, Adjust
+                            onPressed: () => Navigator.pop(ctx, true), // Yes, Adjust
                             child: const Text('Adjust Excess'),
                           ),
                         ],
@@ -1035,9 +1002,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   } catch (e) {
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                            content: Text('Failed to save repayment: $e'),
-                            backgroundColor: Colors.red),
+                        SnackBar(content: Text('Failed to save repayment: $e'), backgroundColor: Colors.red),
                       );
                     }
                   }
@@ -1163,8 +1128,8 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                       amount: amount,
                       paymentMode: paymentMode,
                       referenceNo: refCtrl.text.trim(),
-                      note: noteCtrl.text.trim().isNotEmpty
-                          ? noteCtrl.text.trim()
+                      note: noteCtrl.text.trim().isNotEmpty 
+                          ? noteCtrl.text.trim() 
                           : 'Bulk repayment adjusted across bills',
                       adjustExtra: true,
                     );
@@ -1178,9 +1143,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   } catch (e) {
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                            content: Text('Failed to save bulk repayment: $e'),
-                            backgroundColor: Colors.red),
+                        SnackBar(content: Text('Failed to save bulk repayment: $e'), backgroundColor: Colors.red),
                       );
                     }
                   }
@@ -1222,18 +1185,14 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   children: [
                     pw.Text(
                       property?.propertyName ?? 'Business Statement',
-                      style: pw.TextStyle(
-                          fontSize: 18, fontWeight: pw.FontWeight.bold),
+                      style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
                     ),
                     if (property != null && property.address.isNotEmpty)
-                      pw.Text(property.address,
-                          style: const pw.TextStyle(fontSize: 9)),
+                      pw.Text(property.address, style: const pw.TextStyle(fontSize: 9)),
                     if (property != null && property.mobile.isNotEmpty)
-                      pw.Text('Phone: ${property.mobile}',
-                          style: const pw.TextStyle(fontSize: 9)),
+                      pw.Text('Phone: ${property.mobile}', style: const pw.TextStyle(fontSize: 9)),
                     if (property != null && property.gstNo.isNotEmpty)
-                      pw.Text('GSTIN: ${property.gstNo}',
-                          style: const pw.TextStyle(fontSize: 9)),
+                      pw.Text('GSTIN: ${property.gstNo}', style: const pw.TextStyle(fontSize: 9)),
                   ],
                 ),
                 pw.Column(
@@ -1241,10 +1200,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   children: [
                     pw.Text(
                       'CUSTOMER STATEMENT',
-                      style: pw.TextStyle(
-                          fontSize: 16,
-                          fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.blue800),
+                      style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800),
                     ),
                     pw.Text(
                       'Date: ${DateFormat('dd-MMM-yyyy').format(DateTime.now())}',
@@ -1268,30 +1224,20 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   padding: const pw.EdgeInsets.all(8),
                   decoration: pw.BoxDecoration(
                     border: pw.Border.all(color: PdfColors.grey300),
-                    borderRadius:
-                        const pw.BorderRadius.all(pw.Radius.circular(6)),
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
                   ),
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text('STATEMENT FOR:',
-                          style: pw.TextStyle(
-                              fontSize: 8,
-                              fontWeight: pw.FontWeight.bold,
-                              color: PdfColors.grey700)),
+                      pw.Text('STATEMENT FOR:', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
                       pw.SizedBox(height: 4),
-                      pw.Text(report.customerName,
-                          style: pw.TextStyle(
-                              fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                      pw.Text(report.customerName, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
                       if (report.customerPhone.isNotEmpty)
-                        pw.Text('Phone: ${report.customerPhone}',
-                            style: const pw.TextStyle(fontSize: 9)),
+                        pw.Text('Phone: ${report.customerPhone}', style: const pw.TextStyle(fontSize: 9)),
                       if (report.customerAddress.isNotEmpty)
-                        pw.Text('Address: ${report.customerAddress}',
-                            style: const pw.TextStyle(fontSize: 9)),
+                        pw.Text('Address: ${report.customerAddress}', style: const pw.TextStyle(fontSize: 9)),
                       if (report.customerGstin.isNotEmpty)
-                        pw.Text('GSTIN: ${report.customerGstin}',
-                            style: const pw.TextStyle(fontSize: 9)),
+                        pw.Text('GSTIN: ${report.customerGstin}', style: const pw.TextStyle(fontSize: 9)),
                     ],
                   ),
                 ),
@@ -1301,49 +1247,33 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   decoration: pw.BoxDecoration(
                     color: PdfColors.grey100,
                     border: pw.Border.all(color: PdfColors.grey300),
-                    borderRadius:
-                        const pw.BorderRadius.all(pw.Radius.circular(6)),
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
                   ),
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text('ACCOUNT SUMMARY',
-                          style: pw.TextStyle(
-                              fontSize: 8,
-                              fontWeight: pw.FontWeight.bold,
-                              color: PdfColors.grey700)),
+                      pw.Text('ACCOUNT SUMMARY', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
                       pw.SizedBox(height: 4),
                       pw.Row(
                         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                         children: [
-                          pw.Text('Total Debited (Charges):',
-                              style: const pw.TextStyle(fontSize: 9)),
-                          pw.Text(_money(report.totalDebit),
-                              style: pw.TextStyle(
-                                  fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                          pw.Text('Total Debited (Charges):', style: const pw.TextStyle(fontSize: 9)),
+                          pw.Text(_money(report.totalDebit), style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
                         ],
                       ),
                       pw.SizedBox(height: 2),
                       pw.Row(
                         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                         children: [
-                          pw.Text('Total Credited (Paid):',
-                              style: const pw.TextStyle(fontSize: 9)),
-                          pw.Text(_money(report.totalCredit),
-                              style: pw.TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: pw.FontWeight.bold,
-                                  color: PdfColors.green800)),
+                          pw.Text('Total Credited (Paid):', style: const pw.TextStyle(fontSize: 9)),
+                          pw.Text(_money(report.totalCredit), style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.green800)),
                         ],
                       ),
                       pw.Divider(thickness: 0.5, color: PdfColors.grey400),
                       pw.Row(
                         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                         children: [
-                          pw.Text('Closing Balance:',
-                              style: pw.TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: pw.FontWeight.bold)),
+                          pw.Text('Closing Balance:', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                           pw.Text(
                             report.closingBalance > 0.009
                                 ? '${_money(report.closingBalance)} Dr (Due)'
@@ -1353,11 +1283,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                             style: pw.TextStyle(
                               fontSize: 10,
                               fontWeight: pw.FontWeight.bold,
-                              color: report.closingBalance > 0.009
-                                  ? PdfColors.red800
-                                  : (report.closingBalance < -0.009
-                                      ? PdfColors.green800
-                                      : PdfColors.black),
+                              color: report.closingBalance > 0.009 ? PdfColors.red800 : (report.closingBalance < -0.009 ? PdfColors.green800 : PdfColors.black),
                             ),
                           ),
                         ],
@@ -1371,21 +1297,9 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
 
             // Transactions Table
             pw.TableHelper.fromTextArray(
-              headers: [
-                'Date',
-                'Particulars / Description',
-                'Ref / Voucher',
-                'Mode',
-                'Debit (Dr)',
-                'Credit (Cr)',
-                'Balance'
-              ],
-              headerStyle: pw.TextStyle(
-                  fontWeight: pw.FontWeight.bold,
-                  fontSize: 8,
-                  color: PdfColors.white),
-              headerDecoration:
-                  const pw.BoxDecoration(color: PdfColors.blue800),
+              headers: ['Date', 'Particulars / Description', 'Ref / Voucher', 'Mode', 'Debit (Dr)', 'Credit (Cr)', 'Balance'],
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.white),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.blue800),
               cellStyle: const pw.TextStyle(fontSize: 8),
               cellAlignment: pw.Alignment.centerLeft,
               cellAlignments: {
@@ -1403,9 +1317,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                 final creditStr = tx.credit > 0.009 ? _money(tx.credit) : '-';
                 final balStr = tx.balance > 0.009
                     ? '${_money(tx.balance)} Dr'
-                    : (tx.balance < -0.009
-                        ? '${_money(tx.balance.abs())} Cr'
-                        : _money(0));
+                    : (tx.balance < -0.009 ? '${_money(tx.balance.abs())} Cr' : _money(0));
                 return [
                   dateStr,
                   tx.description,
@@ -1423,8 +1335,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
     );
 
     await Printing.layoutPdf(
-      name:
-          'Customer_Ledger_${report.customerName.replaceAll(RegExp(r'\s+'), '_')}',
+      name: 'Customer_Ledger_${report.customerName.replaceAll(RegExp(r'\s+'), '_')}',
       onLayout: (format) async => pdf.save(),
     );
   }
@@ -1440,22 +1351,14 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
       for (final b in customer.bills) {
         final bNo = b.billNo.trim().toUpperCase();
         final cNo = cleanNo.toUpperCase();
-        if (bNo == cNo ||
-            bNo.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '') ==
-                cNo.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')) {
+        if (bNo == cNo || bNo.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '') == cNo.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')) {
           if (b.saleId > 0) {
             try {
-              final res =
-                  await ApiClient.get('${ApiEndpoints.sales}/${b.saleId}');
-              if (res != null &&
-                  res['success'] == true &&
-                  res['data'] != null &&
-                  res['data'] is Map) {
+              final res = await ApiClient.get('${ApiEndpoints.sales}/${b.saleId}');
+              if (res != null && res['success'] == true && res['data'] != null && res['data'] is Map) {
                 final map = Map<String, dynamic>.from(res['data']);
-                if (map['bill_format'] == null ||
-                    map['bill_format'].toString().trim().isEmpty) {
-                  final sysFormat =
-                      SystemSettingsController().settings?.billFormat;
+                if (map['bill_format'] == null || map['bill_format'].toString().trim().isEmpty) {
+                  final sysFormat = SystemSettingsController().settings?.billFormat;
                   if (sysFormat != null && sysFormat.isNotEmpty) {
                     map['bill_format'] = sysFormat;
                   }
@@ -1469,15 +1372,10 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
     }
 
     try {
-      final res = await ApiClient.get(
-          '${ApiEndpoints.sales}/${Uri.encodeComponent(cleanNo)}');
-      if (res != null &&
-          res['success'] == true &&
-          res['data'] != null &&
-          res['data'] is Map) {
+      final res = await ApiClient.get('${ApiEndpoints.sales}/${Uri.encodeComponent(cleanNo)}');
+      if (res != null && res['success'] == true && res['data'] != null && res['data'] is Map) {
         final map = Map<String, dynamic>.from(res['data']);
-        if (map['bill_format'] == null ||
-            map['bill_format'].toString().trim().isEmpty) {
+        if (map['bill_format'] == null || map['bill_format'].toString().trim().isEmpty) {
           final sysFormat = SystemSettingsController().settings?.billFormat;
           if (sysFormat != null && sysFormat.isNotEmpty) {
             map['bill_format'] = sysFormat;
@@ -1491,17 +1389,13 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
       for (final b in customer.bills) {
         final bNo = b.billNo.trim().toUpperCase();
         final cNo = cleanNo.toUpperCase();
-        if (bNo == cNo ||
-            bNo.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '') ==
-                cNo.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')) {
-          final sysFormat =
-              SystemSettingsController().settings?.billFormat ?? 'THERMAL_80';
+        if (bNo == cNo || bNo.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '') == cNo.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')) {
+          final sysFormat = SystemSettingsController().settings?.billFormat ?? 'THERMAL_80';
           return {
             'sale_no': b.billNo,
             'sale_date': b.billDate.toIso8601String(),
             'bill_format': sysFormat,
-            'status':
-                b.paymentStatus.isNotEmpty ? b.paymentStatus : 'COMPLETED',
+            'status': b.paymentStatus.isNotEmpty ? b.paymentStatus : 'COMPLETED',
             'payment_mode': 'CREDIT',
             'customer_name': customer.customerName,
             'customer_phone': customer.customerPhone,
@@ -1520,8 +1414,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                 'line_total': b.amount,
                 'net_amount': b.amount,
                 'tax_percent': 0.0,
-                'remarks':
-                    'Outstanding: ${_money(b.outstanding)} | Paid: ${_money(b.totalPaid)}',
+                'remarks': 'Outstanding: ${_money(b.outstanding)} | Paid: ${_money(b.totalPaid)}',
               }
             ],
           };
@@ -1627,12 +1520,10 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
 
           final screenWidth = MediaQuery.of(context).size.width;
           final dialogWidth = (screenWidth * 0.92).clamp(320.0, 1000.0);
-          final dialogHeight =
-              (MediaQuery.of(context).size.height * 0.88).clamp(420.0, 780.0);
+          final dialogHeight = (MediaQuery.of(context).size.height * 0.88).clamp(420.0, 780.0);
 
           return Dialog(
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             clipBehavior: Clip.antiAlias,
             backgroundColor: Colors.white,
             child: SizedBox(
@@ -1643,12 +1534,10 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                 children: [
                   // Dialog Header
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                     decoration: BoxDecoration(
                       color: const Color(0xFFF8FAFC),
-                      border: Border(
-                          bottom: BorderSide(color: Colors.grey.shade200)),
+                      border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
@@ -1660,10 +1549,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                             customer.customerName.isNotEmpty
                                 ? customer.customerName.trim()[0].toUpperCase()
                                 : 'C',
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16),
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
                           ),
                         ),
                         const SizedBox(width: 14),
@@ -1689,8 +1575,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                   ),
                                   const SizedBox(width: 8),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 2),
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                     decoration: BoxDecoration(
                                       color: const Color(0xFFEFF6FF),
                                       borderRadius: BorderRadius.circular(6),
@@ -1714,60 +1599,41 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                     Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(Icons.phone_rounded,
-                                            size: 12,
-                                            color: Colors.grey.shade600),
+                                        Icon(Icons.phone_rounded, size: 12, color: Colors.grey.shade600),
                                         const SizedBox(width: 4),
-                                        Text(customer.customerPhone,
-                                            style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey.shade700)),
+                                        Text(customer.customerPhone, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
                                       ],
                                     ),
                                   if (customer.customerGstin.isNotEmpty)
-                                    Text('GSTIN: ${customer.customerGstin}',
-                                        style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey.shade600)),
+                                    Text('GSTIN: ${customer.customerGstin}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                                   if (customer.customerAddress.isNotEmpty)
-                                    Text(customer.customerAddress,
-                                        style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey.shade600),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis),
+                                    Text(customer.customerAddress, style: TextStyle(fontSize: 12, color: Colors.grey.shade600), maxLines: 1, overflow: TextOverflow.ellipsis),
                                 ],
                               ),
                             ],
                           ),
                         ),
-                        if (ledgerReport != null &&
-                            ledgerReport!.entries.isNotEmpty)
+                        if (ledgerReport != null && ledgerReport!.entries.isNotEmpty)
                           IconButton(
                             tooltip: 'Print Statement (PDF)',
-                            icon: const Icon(Icons.print_rounded,
-                                color: Color(0xFF2563EB)),
-                            onPressed: () =>
-                                _printCustomerLedgerPdf(ledgerReport!),
+                            icon: const Icon(Icons.print_rounded, color: Color(0xFF2563EB)),
+                            onPressed: () => _printCustomerLedgerPdf(ledgerReport!),
                           ),
                         IconButton(
                           tooltip: 'Close',
-                          icon: const Icon(Icons.close_rounded,
-                              color: Colors.black54),
+                          icon: const Icon(Icons.close_rounded, color: Colors.black54),
                           onPressed: () => Navigator.pop(dialogCtx),
                         ),
                       ],
                     ),
                   ),
 
-                  // Filter Chips & Range Bar //
+                  // Filter Chips & Range Bar
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      border: Border(
-                          bottom: BorderSide(color: Colors.grey.shade100)),
+                      border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
                     ),
                     child: Wrap(
                       spacing: 10,
@@ -1785,12 +1651,8 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                               selectedColor: const Color(0xFFEFF6FF),
                               checkmarkColor: const Color(0xFF2563EB),
                               labelStyle: TextStyle(
-                                color: allTime
-                                    ? const Color(0xFF2563EB)
-                                    : Colors.grey.shade700,
-                                fontWeight: allTime
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
+                                color: allTime ? const Color(0xFF2563EB) : Colors.grey.shade700,
+                                fontWeight: allTime ? FontWeight.bold : FontWeight.normal,
                                 fontSize: 12,
                               ),
                               onSelected: (val) {
@@ -1802,12 +1664,9 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                             ),
                             if (!allTime) ...[
                               ActionChip(
-                                avatar:
-                                    const Icon(Icons.calendar_today, size: 13),
+                                avatar: const Icon(Icons.calendar_today, size: 13),
                                 label: Text(
-                                  filterFrom != null
-                                      ? _fmtDate(filterFrom!)
-                                      : 'From Date',
+                                  filterFrom != null ? _fmtDate(filterFrom!) : 'From Date',
                                   style: const TextStyle(fontSize: 12),
                                 ),
                                 onPressed: () async {
@@ -1825,16 +1684,11 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                   }
                                 },
                               ),
-                              const Text('to',
-                                  style: TextStyle(
-                                      fontSize: 12, color: Colors.grey)),
+                              const Text('to', style: TextStyle(fontSize: 12, color: Colors.grey)),
                               ActionChip(
-                                avatar:
-                                    const Icon(Icons.calendar_today, size: 13),
+                                avatar: const Icon(Icons.calendar_today, size: 13),
                                 label: Text(
-                                  filterTo != null
-                                      ? _fmtDate(filterTo!)
-                                      : 'To Date',
+                                  filterTo != null ? _fmtDate(filterTo!) : 'To Date',
                                   style: const TextStyle(fontSize: 12),
                                 ),
                                 onPressed: () async {
@@ -1867,8 +1721,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   // Summary KPI Row
                   if (ledgerReport != null)
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       color: const Color(0xFFF8FAFC),
                       child: LayoutBuilder(
                         builder: (context, constraints) {
@@ -1881,18 +1734,14 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                   decoration: BoxDecoration(
                                     color: Colors.white,
                                     borderRadius: BorderRadius.circular(8),
-                                    border:
-                                        Border.all(color: Colors.grey.shade200),
+                                    border: Border.all(color: Colors.grey.shade200),
                                   ),
                                   child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         'Total Debit (Invoiced)',
-                                        style: TextStyle(
-                                            fontSize: isCompact ? 10 : 11,
-                                            color: Colors.grey.shade600),
+                                        style: TextStyle(fontSize: isCompact ? 10 : 11, color: Colors.grey.shade600),
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                       const SizedBox(height: 2),
@@ -1915,18 +1764,14 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                   decoration: BoxDecoration(
                                     color: Colors.white,
                                     borderRadius: BorderRadius.circular(8),
-                                    border:
-                                        Border.all(color: Colors.grey.shade200),
+                                    border: Border.all(color: Colors.grey.shade200),
                                   ),
                                   child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         'Total Credit (Paid)',
-                                        style: TextStyle(
-                                            fontSize: isCompact ? 10 : 11,
-                                            color: Colors.grey.shade600),
+                                        style: TextStyle(fontSize: isCompact ? 10 : 11, color: Colors.grey.shade600),
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                       const SizedBox(height: 2),
@@ -1950,44 +1795,32 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                     color: Colors.white,
                                     borderRadius: BorderRadius.circular(8),
                                     border: Border.all(
-                                      color:
-                                          ledgerReport!.closingBalance > 0.009
-                                              ? Colors.red.shade200
-                                              : (ledgerReport!.closingBalance <
-                                                      -0.009
-                                                  ? Colors.green.shade200
-                                                  : Colors.grey.shade200),
+                                      color: ledgerReport!.closingBalance > 0.009
+                                          ? Colors.red.shade200
+                                          : (ledgerReport!.closingBalance < -0.009 ? Colors.green.shade200 : Colors.grey.shade200),
                                     ),
                                   ),
                                   child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         'Net Balance',
-                                        style: TextStyle(
-                                            fontSize: isCompact ? 10 : 11,
-                                            color: Colors.grey.shade600),
+                                        style: TextStyle(fontSize: isCompact ? 10 : 11, color: Colors.grey.shade600),
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
                                         ledgerReport!.closingBalance > 0.009
                                             ? '${_money(ledgerReport!.closingBalance)} Dr'
-                                            : (ledgerReport!.closingBalance <
-                                                    -0.009
+                                            : (ledgerReport!.closingBalance < -0.009
                                                 ? '${_money(ledgerReport!.closingBalance.abs())} Cr'
                                                 : '${_money(0)} Settled'),
                                         style: TextStyle(
                                           fontSize: isCompact ? 13 : 15,
                                           fontWeight: FontWeight.bold,
-                                          color: ledgerReport!.closingBalance >
-                                                  0.009
+                                          color: ledgerReport!.closingBalance > 0.009
                                               ? const Color(0xFFDC2626)
-                                              : (ledgerReport!.closingBalance <
-                                                      -0.009
-                                                  ? const Color(0xFF16A34A)
-                                                  : Colors.black87),
+                                              : (ledgerReport!.closingBalance < -0.009 ? const Color(0xFF16A34A) : Colors.black87),
                                         ),
                                       ),
                                     ],
@@ -2011,45 +1844,32 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      const Icon(Icons.error_outline_rounded,
-                                          color: Colors.red, size: 40),
+                                      const Icon(Icons.error_outline_rounded, color: Colors.red, size: 40),
                                       const SizedBox(height: 10),
-                                      Text(errorMsg!,
-                                          style: const TextStyle(
-                                              color: Colors.red)),
+                                      Text(errorMsg!, style: const TextStyle(color: Colors.red)),
                                       const SizedBox(height: 12),
-                                      FilledButton(
-                                          onPressed: fetchLedger,
-                                          child: const Text('Retry')),
+                                      FilledButton(onPressed: fetchLedger, child: const Text('Retry')),
                                     ],
                                   ),
                                 ),
                               )
-                            : (ledgerReport == null ||
-                                    ledgerReport!.entries.isEmpty)
+                            : (ledgerReport == null || ledgerReport!.entries.isEmpty)
                                 ? Center(
                                     child: Padding(
                                       padding: const EdgeInsets.all(32),
                                       child: Column(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          Icon(Icons.receipt_long_outlined,
-                                              size: 48,
-                                              color: Colors.grey.shade400),
+                                          Icon(Icons.receipt_long_outlined, size: 48, color: Colors.grey.shade400),
                                           const SizedBox(height: 12),
                                           Text(
                                             'No recorded transactions found for ${customer.customerName}',
-                                            style: TextStyle(
-                                                fontSize: 14,
-                                                color: Colors.grey.shade600,
-                                                fontWeight: FontWeight.w500),
+                                            style: TextStyle(fontSize: 14, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
                                           ),
                                           const SizedBox(height: 4),
                                           Text(
                                             'All sales, payments, advances, and adjustments will appear here automatically.',
-                                            style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey.shade400),
+                                            style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
                                           ),
                                         ],
                                       ),
@@ -2057,8 +1877,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                   )
                                 : LayoutBuilder(
                                     builder: (context, constraints) {
-                                      final isWide =
-                                          constraints.maxWidth >= 720;
+                                      final isWide = constraints.maxWidth >= 720;
                                       final entries = ledgerReport!.entries;
 
                                       if (!isWide) {
@@ -2066,69 +1885,38 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                         return ListView.separated(
                                           padding: const EdgeInsets.all(12),
                                           itemCount: entries.length,
-                                          separatorBuilder: (_, __) =>
-                                              const SizedBox(height: 8),
+                                          separatorBuilder: (_, __) => const SizedBox(height: 8),
                                           itemBuilder: (context, index) {
                                             final tx = entries[index];
                                             final isDebit = tx.debit > 0.009;
                                             return Card(
                                               elevation: 0,
                                               shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(10),
-                                                side: BorderSide(
-                                                    color:
-                                                        Colors.grey.shade200),
+                                                borderRadius: BorderRadius.circular(10),
+                                                side: BorderSide(color: Colors.grey.shade200),
                                               ),
                                               color: Colors.white,
                                               child: Padding(
-                                                padding:
-                                                    const EdgeInsets.all(12),
+                                                padding: const EdgeInsets.all(12),
                                                 child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
                                                   children: [
                                                     Row(
-                                                      mainAxisAlignment:
-                                                          MainAxisAlignment
-                                                              .spaceBetween,
+                                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                                       children: [
                                                         Text(
-                                                          DateFormat(
-                                                                  'dd-MMM-yyyy')
-                                                              .format(tx.date),
-                                                          style: TextStyle(
-                                                              fontSize: 12,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .w600,
-                                                              color: Colors.grey
-                                                                  .shade700),
+                                                          DateFormat('dd-MMM-yyyy').format(tx.date),
+                                                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
                                                         ),
                                                         Container(
-                                                          padding:
-                                                              const EdgeInsets
-                                                                  .symmetric(
-                                                                  horizontal: 6,
-                                                                  vertical: 2),
-                                                          decoration:
-                                                              BoxDecoration(
-                                                            color: const Color(
-                                                                0xFFF1F5F9),
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                                        4),
+                                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                          decoration: BoxDecoration(
+                                                            color: const Color(0xFFF1F5F9),
+                                                            borderRadius: BorderRadius.circular(4),
                                                           ),
                                                           child: Text(
                                                             tx.paymentMode,
-                                                            style: const TextStyle(
-                                                                fontSize: 10,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .bold,
-                                                                color: Color(
-                                                                    0xFF475569)),
+                                                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF475569)),
                                                           ),
                                                         ),
                                                       ],
@@ -2136,48 +1924,19 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                                     const SizedBox(height: 6),
                                                     Text(
                                                       tx.description,
-                                                      style: const TextStyle(
-                                                          fontSize: 14,
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          color: Color(
-                                                              0xFF1E293B)),
+                                                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
                                                     ),
                                                     if (tx.voucherNo.isNotEmpty)
                                                       InkWell(
-                                                        onTap: () =>
-                                                            _showSaleBillPreviewDialog(
-                                                                tx.voucherNo,
-                                                                customer:
-                                                                    customer),
+                                                        onTap: () => _showSaleBillPreviewDialog(tx.voucherNo, customer: customer),
                                                         child: Padding(
-                                                          padding:
-                                                              const EdgeInsets
-                                                                  .symmetric(
-                                                                  vertical: 2),
+                                                          padding: const EdgeInsets.symmetric(vertical: 2),
                                                           child: Row(
-                                                            mainAxisSize:
-                                                                MainAxisSize
-                                                                    .min,
+                                                            mainAxisSize: MainAxisSize.min,
                                                             children: [
-                                                              Text(
-                                                                  'Ref: ${tx.voucherNo}',
-                                                                  style: const TextStyle(
-                                                                      fontSize:
-                                                                          11,
-                                                                      color: Color(
-                                                                          0xFF2563EB),
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .bold)),
-                                                              const SizedBox(
-                                                                  width: 4),
-                                                              const Icon(
-                                                                  Icons
-                                                                      .visibility_outlined,
-                                                                  size: 14,
-                                                                  color: Color(
-                                                                      0xFF2563EB)),
+                                                              Text('Ref: ${tx.voucherNo}', style: const TextStyle(fontSize: 11, color: Color(0xFF2563EB), fontWeight: FontWeight.bold)),
+                                                              const SizedBox(width: 4),
+                                                              const Icon(Icons.visibility_outlined, size: 14, color: Color(0xFF2563EB)),
                                                             ],
                                                           ),
                                                         ),
@@ -2186,88 +1945,42 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                                     const Divider(height: 1),
                                                     const SizedBox(height: 8),
                                                     Row(
-                                                      mainAxisAlignment:
-                                                          MainAxisAlignment
-                                                              .spaceBetween,
+                                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                                       children: [
                                                         Column(
-                                                          crossAxisAlignment:
-                                                              CrossAxisAlignment
-                                                                  .start,
+                                                          crossAxisAlignment: CrossAxisAlignment.start,
                                                           children: [
                                                             Text(
-                                                              isDebit
-                                                                  ? 'Debit (Charges)'
-                                                                  : 'Credit (Paid)',
-                                                              style: TextStyle(
-                                                                  fontSize: 10,
-                                                                  color: Colors
-                                                                      .grey
-                                                                      .shade500),
+                                                              isDebit ? 'Debit (Charges)' : 'Credit (Paid)',
+                                                              style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
                                                             ),
                                                             Text(
-                                                              isDebit
-                                                                  ? _money(
-                                                                      tx.debit)
-                                                                  : _money(tx
-                                                                      .credit),
+                                                              isDebit ? _money(tx.debit) : _money(tx.credit),
                                                               style: TextStyle(
                                                                 fontSize: 13,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .bold,
-                                                                color: isDebit
-                                                                    ? const Color(
-                                                                        0xFFDC2626)
-                                                                    : const Color(
-                                                                        0xFF16A34A),
+                                                                fontWeight: FontWeight.bold,
+                                                                color: isDebit ? const Color(0xFFDC2626) : const Color(0xFF16A34A),
                                                               ),
                                                             ),
                                                           ],
                                                         ),
                                                         Column(
-                                                          crossAxisAlignment:
-                                                              CrossAxisAlignment
-                                                                  .end,
+                                                          crossAxisAlignment: CrossAxisAlignment.end,
                                                           children: [
-                                                            Text('Balance',
-                                                                style: TextStyle(
-                                                                    fontSize:
-                                                                        10,
-                                                                    color: Colors
-                                                                        .grey
-                                                                        .shade500)),
+                                                            Text('Balance', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
                                                             Text(
                                                               tx.balance > 0.009
                                                                   ? '${_money(tx.balance)} Dr'
-                                                                  : (tx.balance <
-                                                                          -0.009
-                                                                      ? '${_money(tx.balance.abs())} Cr'
-                                                                      : _money(
-                                                                          0)),
-                                                              style: const TextStyle(
-                                                                  fontSize: 13,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .bold,
-                                                                  color: Color(
-                                                                      0xFF334155)),
+                                                                  : (tx.balance < -0.009 ? '${_money(tx.balance.abs())} Cr' : _money(0)),
+                                                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF334155)),
                                                             ),
                                                           ],
                                                         ),
                                                       ],
                                                     ),
-                                                    if (tx
-                                                        .notes.isNotEmpty) ...[
+                                                    if (tx.notes.isNotEmpty) ...[
                                                       const SizedBox(height: 4),
-                                                      Text(tx.notes,
-                                                          style: TextStyle(
-                                                              fontSize: 10,
-                                                              fontStyle:
-                                                                  FontStyle
-                                                                      .italic,
-                                                              color: Colors.grey
-                                                                  .shade600)),
+                                                      Text(tx.notes, style: TextStyle(fontSize: 10, fontStyle: FontStyle.italic, color: Colors.grey.shade600)),
                                                     ],
                                                   ],
                                                 ),
@@ -2279,162 +1992,57 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
 
                                       // Full Desktop/Tablet Table View
                                       return SingleChildScrollView(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 16, vertical: 12),
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                         child: SizedBox(
                                           width: double.infinity,
                                           child: DataTable(
-                                            headingRowColor:
-                                                WidgetStateProperty.all(
-                                                    const Color(0xFFF1F5F9)),
+                                            headingRowColor: WidgetStateProperty.all(const Color(0xFFF1F5F9)),
                                             horizontalMargin: 12,
                                             columnSpacing: 16,
                                             dataRowMinHeight: 44,
                                             dataRowMaxHeight: 56,
                                             columns: const [
-                                              DataColumn(
-                                                  label: Text('Date',
-                                                      style: TextStyle(
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          fontSize: 12))),
-                                              DataColumn(
-                                                  label: Text(
-                                                      'Particulars / Description',
-                                                      style: TextStyle(
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          fontSize: 12))),
-                                              DataColumn(
-                                                  label: Text('Ref / Bill #',
-                                                      style: TextStyle(
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          fontSize: 12))),
-                                              DataColumn(
-                                                  label: Text('Mode',
-                                                      style: TextStyle(
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          fontSize: 12))),
-                                              DataColumn(
-                                                  numeric: true,
-                                                  label: Text('Debit (+Due)',
-                                                      style: TextStyle(
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          fontSize: 12,
-                                                          color: Color(
-                                                              0xFFDC2626)))),
-                                              DataColumn(
-                                                  numeric: true,
-                                                  label: Text('Credit (-Paid)',
-                                                      style: TextStyle(
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          fontSize: 12,
-                                                          color: Color(
-                                                              0xFF16A34A)))),
-                                              DataColumn(
-                                                  numeric: true,
-                                                  label: Text('Running Balance',
-                                                      style: TextStyle(
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          fontSize: 12))),
+                                              DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                                              DataColumn(label: Text('Particulars / Description', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                                              DataColumn(label: Text('Ref / Bill #', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                                              DataColumn(label: Text('Mode', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                                              DataColumn(numeric: true, label: Text('Debit (+Due)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFFDC2626)))),
+                                              DataColumn(numeric: true, label: Text('Credit (-Paid)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF16A34A)))),
+                                              DataColumn(numeric: true, label: Text('Running Balance', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                                             ],
-                                            rows: entries
-                                                .asMap()
-                                                .entries
-                                                .map((entry) {
+                                            rows: entries.asMap().entries.map((entry) {
                                               final index = entry.key;
                                               final tx = entry.value;
                                               final isDebit = tx.debit > 0.009;
-                                              final isCredit =
-                                                  tx.credit > 0.009;
+                                              final isCredit = tx.credit > 0.009;
                                               return DataRow(
-                                                color: WidgetStateProperty.all(
-                                                    index % 2 == 0
-                                                        ? Colors.white
-                                                        : const Color(
-                                                            0xFFFAFAFA)),
+                                                color: WidgetStateProperty.all(index % 2 == 0 ? Colors.white : const Color(0xFFFAFAFA)),
                                                 cells: [
-                                                  DataCell(Text(
-                                                      DateFormat('dd-MMM-yyyy')
-                                                          .format(tx.date),
-                                                      style: const TextStyle(
-                                                          fontSize: 12))),
+                                                  DataCell(Text(DateFormat('dd-MMM-yyyy').format(tx.date), style: const TextStyle(fontSize: 12))),
                                                   DataCell(
                                                     Column(
-                                                      mainAxisAlignment:
-                                                          MainAxisAlignment
-                                                              .center,
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .start,
+                                                      mainAxisAlignment: MainAxisAlignment.center,
+                                                      crossAxisAlignment: CrossAxisAlignment.start,
                                                       children: [
-                                                        Text(tx.description,
-                                                            style: const TextStyle(
-                                                                fontSize: 12,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w600)),
+                                                        Text(tx.description, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                                                         if (tx.notes.isNotEmpty)
-                                                          Text(tx.notes,
-                                                              style: TextStyle(
-                                                                  fontSize: 10,
-                                                                  color: Colors
-                                                                      .grey
-                                                                      .shade500),
-                                                              maxLines: 1,
-                                                              overflow:
-                                                                  TextOverflow
-                                                                      .ellipsis),
+                                                          Text(tx.notes, style: TextStyle(fontSize: 10, color: Colors.grey.shade500), maxLines: 1, overflow: TextOverflow.ellipsis),
                                                       ],
                                                     ),
                                                   ),
                                                   DataCell(
                                                     Row(
-                                                      mainAxisSize:
-                                                          MainAxisSize.min,
+                                                      mainAxisSize: MainAxisSize.min,
                                                       children: [
-                                                        Text(
-                                                            tx.voucherNo
-                                                                    .isNotEmpty
-                                                                ? tx.voucherNo
-                                                                : '-',
-                                                            style: TextStyle(
-                                                                fontSize: 12,
-                                                                color: Colors
-                                                                    .grey
-                                                                    .shade700)),
-                                                        if (tx.voucherNo
-                                                            .isNotEmpty) ...[
-                                                          const SizedBox(
-                                                              width: 4),
+                                                        Text(tx.voucherNo.isNotEmpty ? tx.voucherNo : '-', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                                                        if (tx.voucherNo.isNotEmpty) ...[
+                                                          const SizedBox(width: 4),
                                                           IconButton(
-                                                            icon: const Icon(
-                                                                Icons
-                                                                    .visibility_outlined,
-                                                                size: 16,
-                                                                color: Color(
-                                                                    0xFF2563EB)),
-                                                            tooltip:
-                                                                'View Bill ${tx.voucherNo}',
-                                                            padding:
-                                                                EdgeInsets.zero,
-                                                            constraints:
-                                                                const BoxConstraints(
-                                                                    minWidth:
-                                                                        24,
-                                                                    minHeight:
-                                                                        24),
-                                                            onPressed: () =>
-                                                                _showSaleBillPreviewDialog(
-                                                                    tx
-                                                                        .voucherNo,
-                                                                    customer:
-                                                                        customer),
+                                                            icon: const Icon(Icons.visibility_outlined, size: 16, color: Color(0xFF2563EB)),
+                                                            tooltip: 'View Bill ${tx.voucherNo}',
+                                                            padding: EdgeInsets.zero,
+                                                            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                                                            onPressed: () => _showSaleBillPreviewDialog(tx.voucherNo, customer: customer),
                                                           ),
                                                         ],
                                                       ],
@@ -2442,82 +2050,35 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                                   ),
                                                   DataCell(
                                                     Container(
-                                                      padding: const EdgeInsets
-                                                          .symmetric(
-                                                          horizontal: 6,
-                                                          vertical: 2),
+                                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                                       decoration: BoxDecoration(
-                                                        color: const Color(
-                                                            0xFFF1F5F9),
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(4),
+                                                        color: const Color(0xFFF1F5F9),
+                                                        borderRadius: BorderRadius.circular(4),
                                                       ),
-                                                      child: Text(
-                                                          tx.paymentMode,
-                                                          style: const TextStyle(
-                                                              fontSize: 10,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .bold,
-                                                              color: Color(
-                                                                  0xFF475569))),
+                                                      child: Text(tx.paymentMode, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF475569))),
                                                     ),
                                                   ),
                                                   DataCell(
                                                     isDebit
-                                                        ? Text(_money(tx.debit),
-                                                            style: const TextStyle(
-                                                                fontSize: 12,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .bold,
-                                                                color: Color(
-                                                                    0xFFDC2626)))
-                                                        : const Text('-',
-                                                            style: TextStyle(
-                                                                fontSize: 12,
-                                                                color: Colors
-                                                                    .grey)),
+                                                        ? Text(_money(tx.debit), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFDC2626)))
+                                                        : const Text('-', style: TextStyle(fontSize: 12, color: Colors.grey)),
                                                   ),
                                                   DataCell(
                                                     isCredit
-                                                        ? Text(
-                                                            _money(tx.credit),
-                                                            style: const TextStyle(
-                                                                fontSize: 12,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .bold,
-                                                                color: Color(
-                                                                    0xFF16A34A)))
-                                                        : const Text('-',
-                                                            style: TextStyle(
-                                                                fontSize: 12,
-                                                                color: Colors
-                                                                    .grey)),
+                                                        ? Text(_money(tx.credit), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)))
+                                                        : const Text('-', style: TextStyle(fontSize: 12, color: Colors.grey)),
                                                   ),
                                                   DataCell(
                                                     Text(
                                                       tx.balance > 0.009
                                                           ? '${_money(tx.balance)} Dr'
-                                                          : (tx.balance < -0.009
-                                                              ? '${_money(tx.balance.abs())} Cr'
-                                                              : _money(0)),
+                                                          : (tx.balance < -0.009 ? '${_money(tx.balance.abs())} Cr' : _money(0)),
                                                       style: TextStyle(
                                                         fontSize: 12,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        color: tx.balance >
-                                                                0.009
-                                                            ? const Color(
-                                                                0xFFDC2626)
-                                                            : (tx.balance <
-                                                                    -0.009
-                                                                ? const Color(
-                                                                    0xFF16A34A)
-                                                                : Colors
-                                                                    .black87),
+                                                        fontWeight: FontWeight.bold,
+                                                        color: tx.balance > 0.009
+                                                            ? const Color(0xFFDC2626)
+                                                            : (tx.balance < -0.009 ? const Color(0xFF16A34A) : Colors.black87),
                                                       ),
                                                     ),
                                                   ),
@@ -2545,8 +2106,8 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
     AdvanceEntry? advance,
   }) async {
     final amountCtrl = TextEditingController(
-      text:
-          (advance?.originalAmount ?? customer.totalAdvance).toStringAsFixed(2),
+      text: (advance?.originalAmount ?? customer.totalAdvance)
+          .toStringAsFixed(2),
     );
     final refCtrl = TextEditingController(text: advance?.referenceNo ?? '');
     final noteCtrl = TextEditingController(text: advance?.note ?? '');
@@ -2673,8 +2234,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
 
   Map<String, double> _parseAdvanceBreakdown(AdvanceEntry advance) {
     final note = advance.note;
-    final regex = RegExp(r'\(Refunded Rs\.\s*([0-9]+(?:\.[0-9]+)?)\)',
-        caseSensitive: false);
+    final regex = RegExp(r'\(Refunded Rs\.\s*([0-9]+(?:\.[0-9]+)?)\)', caseSensitive: false);
     double totalRefunded = 0.0;
     final matches = regex.allMatches(note);
     for (final match in matches) {
@@ -2683,7 +2243,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
         totalRefunded += double.tryParse(amountStr) ?? 0.0;
       }
     }
-
+    
     final totalUsed = advance.originalAmount - advance.availableAmount;
     double totalConsumed = totalUsed - totalRefunded;
     if (totalConsumed < 0) totalConsumed = 0.0;
@@ -2696,17 +2256,15 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
   }
 
   String _cleanAdvanceNote(String note) {
-    final regex = RegExp(r'\(Refunded Rs\.\s*[0-9]+(?:\.[0-9]+)?\)',
-        caseSensitive: false);
+    final regex = RegExp(r'\(Refunded Rs\.\s*[0-9]+(?:\.[0-9]+)?\)', caseSensitive: false);
     return note.replaceAll(regex, '').replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
-  void _navigateToLedgerForAdvance(
-      CreditCustomerReport customer, AdvanceEntry advance) {
+  void _navigateToLedgerForAdvance(CreditCustomerReport customer, AdvanceEntry advance) {
     setState(() {
       _tabController.index = 1;
-      ledgerSearchCtrl.text = customer.customerName.isNotEmpty
-          ? customer.customerName
+      ledgerSearchCtrl.text = customer.customerName.isNotEmpty 
+          ? customer.customerName 
           : customer.customerPhone;
       fromDate = advance.advanceDate;
       toDate = DateTime.now();
@@ -2727,8 +2285,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
       return !(isSubMode || isSubRef || isSubNote);
     }).fold<double>(0, (sum, e) => sum + e.availableAmount);
 
-    final amountCtrl =
-        TextEditingController(text: nonSubAdvance.toStringAsFixed(2));
+    final amountCtrl = TextEditingController(text: nonSubAdvance.toStringAsFixed(2));
     final refCtrl = TextEditingController();
     final noteCtrl = TextEditingController(text: 'Refund of customer advance');
     String paymentMode = 'CASH';
@@ -2750,15 +2307,13 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                     title: Text(customer.customerName),
                     subtitle: Text(
                       'Available Non-Subscription Advance: ${_money(nonSubAdvance)}',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, color: Colors.green),
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green),
                     ),
                   ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: amountCtrl,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     decoration: InputDecoration(
                       labelText: 'Refund Amount',
                       prefixText: '${CurrencyService.symbol} ',
@@ -2777,14 +2332,12 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                         .toList(),
                     onChanged: (value) =>
                         setDialogState(() => paymentMode = value ?? 'CASH'),
-                    decoration: const InputDecoration(
-                        labelText: 'Refund Method / Payment Mode'),
+                    decoration: const InputDecoration(labelText: 'Refund Method / Payment Mode'),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: refCtrl,
-                    decoration: const InputDecoration(
-                        labelText: 'Reference No (Optional)'),
+                    decoration: const InputDecoration(labelText: 'Reference No (Optional)'),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -2805,34 +2358,26 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   backgroundColor: const Color(0xFFDC2626),
                 ),
                 onPressed: () async {
-                  final refundAmount =
-                      double.tryParse(amountCtrl.text.trim()) ?? 0.0;
+                  final refundAmount = double.tryParse(amountCtrl.text.trim()) ?? 0.0;
                   if (refundAmount <= 0) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('Please enter a valid refund amount')),
+                      const SnackBar(content: Text('Please enter a valid refund amount')),
                     );
                     return;
                   }
                   if (refundAmount > nonSubAdvance) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                          content: Text(
-                              'Refund cannot exceed available non-subscription advance of ${_money(nonSubAdvance)}')),
+                      SnackBar(content: Text('Refund cannot exceed available non-subscription advance of ${_money(nonSubAdvance)}')),
                     );
                     return;
                   }
 
                   // Distribute the refund amount across non-subscription advances
                   final advancesToRefund = customer.advances.where((e) {
-                    if (e.availableAmount <= 0.009)
-                      return false; // Ignore fully refunded leftovers
-                    final isSubMode =
-                        e.paymentMode.toUpperCase() == 'SUBSCRIPTION';
-                    final isSubRef =
-                        e.referenceNo.toUpperCase().contains('SUBSCRIPTION');
-                    final isSubNote =
-                        e.note.toLowerCase().contains('subscription');
+                    if (e.availableAmount <= 0.009) return false; // Ignore fully refunded leftovers
+                    final isSubMode = e.paymentMode.toUpperCase() == 'SUBSCRIPTION';
+                    final isSubRef = e.referenceNo.toUpperCase().contains('SUBSCRIPTION');
+                    final isSubNote = e.note.toLowerCase().contains('subscription');
                     return !(isSubMode || isSubRef || isSubNote);
                   }).toList();
 
@@ -2846,9 +2391,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                       final currentAvailable = adv.availableAmount;
                       if (currentAvailable <= 0) continue;
 
-                      final deduct = currentAvailable < remainingRefund
-                          ? currentAvailable
-                          : remainingRefund;
+                      final deduct = currentAvailable < remainingRefund ? currentAvailable : remainingRefund;
 
                       // Make a POST call to the new refund endpoint on the backend
                       await ApiClient.post(
@@ -2875,7 +2418,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
 
                   if (!mounted) return;
                   Navigator.pop(context);
-
+                  
                   await ctrl.loadCreditReport(
                     fromDate: fromDate,
                     toDate: toDate,
@@ -2940,8 +2483,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                     controller: purposeCtrl,
                     decoration: const InputDecoration(
                       labelText: 'Purpose',
-                      hintText:
-                          'Owner withdrawal / bank deposit / cash transfer',
+                      hintText: 'Owner withdrawal / bank deposit / cash transfer',
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -3117,16 +2659,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
       }
     } else if (_tabController.index == 0) {
       writeRow(
-        [
-          'Customer Name',
-          'Phone',
-          'Address',
-          'Bill',
-          'Date',
-          'Amount',
-          'Outstanding',
-          'Status'
-        ],
+        ['Customer Name', 'Phone', 'Address', 'Bill', 'Date', 'Amount', 'Outstanding', 'Status'],
         style: headerStyle,
       );
       for (final customer in ctrl.creditCustomers) {
@@ -3200,9 +2733,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
           'Opening deposit carried for business',
           '',
           day.openingBalance >= 0 ? day.openingBalance.toStringAsFixed(2) : '',
-          day.openingBalance < 0
-              ? day.openingBalance.abs().toStringAsFixed(2)
-              : '',
+          day.openingBalance < 0 ? day.openingBalance.abs().toStringAsFixed(2) : '',
           day.openingBalance.toStringAsFixed(2),
         ], style: ledgerOpeningStyle);
         for (final entry in day.entries) {
@@ -3228,9 +2759,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
           '',
           '',
           '',
-          dayOutstandingTotal <= 0
-              ? ''
-              : dayOutstandingTotal.toStringAsFixed(2),
+          dayOutstandingTotal <= 0 ? '' : dayOutstandingTotal.toStringAsFixed(2),
           dayCreditTotal.toStringAsFixed(2),
           dayDebitTotal.toStringAsFixed(2),
           '',
@@ -3269,7 +2798,14 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
         ]);
       }
     } else if (_tabController.index == 4) {
-      writeRow(['Date', 'Purpose', 'Mode', 'Amount', 'Reference', 'Note']);
+      writeRow([
+        'Date',
+        'Purpose',
+        'Mode',
+        'Amount',
+        'Reference',
+        'Note'
+      ]);
       for (final item in ctrl.withdrawals) {
         writeRow([
           _fmtDate(item.withdrawalDate),
@@ -3412,7 +2948,8 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
     } else if (_tabController.index == 1) {
       accent = PdfColors.indigo700;
       tableRowDecoration = const pw.BoxDecoration(color: PdfColors.blue50);
-      tableOddRowDecoration = const pw.BoxDecoration(color: PdfColors.indigo50);
+      tableOddRowDecoration =
+          const pw.BoxDecoration(color: PdfColors.indigo50);
       headers = const [
         'Date',
         'Type',
@@ -3447,9 +2984,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
           'Opening deposit carried for business',
           '',
           day.openingBalance >= 0 ? day.openingBalance.toStringAsFixed(2) : '',
-          day.openingBalance < 0
-              ? day.openingBalance.abs().toStringAsFixed(2)
-              : '',
+          day.openingBalance < 0 ? day.openingBalance.abs().toStringAsFixed(2) : '',
           day.openingBalance.toStringAsFixed(2)
         ]);
         for (final entry in day.entries) {
@@ -3474,9 +3009,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
           '',
           '',
           '',
-          dayOutstandingTotal <= 0
-              ? ''
-              : dayOutstandingTotal.toStringAsFixed(2),
+          dayOutstandingTotal <= 0 ? '' : dayOutstandingTotal.toStringAsFixed(2),
           dayCreditTotal.toStringAsFixed(2),
           dayDebitTotal.toStringAsFixed(2),
           '',
@@ -3588,29 +3121,14 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
     List<PdfKpiItem>? kpis;
     if (_tabController.index == 0) {
       kpis = [
-        PdfKpiItem(
-            label: 'Total Credit Bills',
-            value: '${ctrl.totalCreditBills}',
-            color: PdfColor.fromHex('#1E40AF')),
-        PdfKpiItem(
-            label: 'Total Outstanding',
-            value: currency.format(ctrl.totalOutstanding),
-            color: PdfColor.fromHex('#DC2626')),
+        PdfKpiItem(label: 'Total Credit Bills', value: '${ctrl.totalCreditBills}', color: PdfColor.fromHex('#1E40AF')),
+        PdfKpiItem(label: 'Total Outstanding', value: currency.format(ctrl.totalOutstanding), color: PdfColor.fromHex('#DC2626')),
       ];
     } else if (_tabController.index == 6) {
       kpis = [
-        PdfKpiItem(
-            label: 'Total Deliveries',
-            value: '${ctrl.deliveries.length}',
-            color: PdfColor.fromHex('#1E40AF')),
-        PdfKpiItem(
-            label: 'Delivery Amount',
-            value: currency.format(ctrl.deliveryTotal),
-            color: PdfColor.fromHex('#166534')),
-        PdfKpiItem(
-            label: 'Delivery Outstanding',
-            value: currency.format(ctrl.deliveryOutstanding),
-            color: PdfColor.fromHex('#DC2626')),
+        PdfKpiItem(label: 'Total Deliveries', value: '${ctrl.deliveries.length}', color: PdfColor.fromHex('#1E40AF')),
+        PdfKpiItem(label: 'Delivery Amount', value: currency.format(ctrl.deliveryTotal), color: PdfColor.fromHex('#166534')),
+        PdfKpiItem(label: 'Delivery Outstanding', value: currency.format(ctrl.deliveryOutstanding), color: PdfColor.fromHex('#DC2626')),
       ];
     }
 
@@ -3620,8 +3138,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
       headers: headers,
       data: rows,
       kpis: kpis,
-      pdfFileName:
-          'Cash_Ledger_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}',
+      pdfFileName: 'Cash_Ledger_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}',
     );
   }
 
@@ -3693,7 +3210,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                       onPressed: () => _showWithdrawalDialog(),
                       icon: const Icon(Icons.money_off_csred_outlined),
                       label: const Text('Add Withdrawal (Contra)'))
-                  : null,
+              : null,
       body: AnimatedBuilder(
         animation: ctrl,
         builder: (context, _) {
@@ -3750,112 +3267,100 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 900),
             child: Container(
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  _dateField('From', fromCtrl, () => _pickDate(true),
-                      width: smallFieldWidth),
-                  _dateField('To', toCtrl, () => _pickDate(false),
-                      width: smallFieldWidth),
-                  if (_tabController.index == 0)
-                    _textField(creditSearchCtrl, 'Customer name / number',
-                        width: fieldWidth),
-                  if (_tabController.index == 1) ...[
-                    _textField(ledgerSearchCtrl, 'Ledger search',
-                        width: fieldWidth),
-                    _dropdown(
-                      ledgerType,
-                      'Type',
-                      const [
-                        '',
-                        'SALE_CASH',
-                        'SALE_CREDIT',
-                        'REPAYMENT',
-                        'EXPENSE',
-                        'SUPPLIER_PAYMENT',
-                        'INCOME',
-                        'OPENING_DEPOSIT',
-                        'WITHDRAWAL',
-                        'SUBSCRIPTION',
-                        'OUTSTANDING'
-                      ],
-                      (v) => setState(() => ledgerType = v ?? ''),
-                      width: narrowFieldWidth,
-                    ),
-                    _dropdown(
-                      ledgerPaymentMethod,
-                      'Payment',
-                      const [
-                        '',
-                        'CASH',
-                        'CARD',
-                        'UPI',
-                        'BANK',
-                        'CREDIT',
-                        'SUBSCRIPTION'
-                      ],
-                      (v) => setState(() => ledgerPaymentMethod = v ?? ''),
-                      width: narrowFieldWidth,
-                    ),
+          margin: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _dateField('From', fromCtrl, () => _pickDate(true),
+                  width: smallFieldWidth),
+              _dateField('To', toCtrl, () => _pickDate(false),
+                  width: smallFieldWidth),
+              if (_tabController.index == 0)
+                _textField(creditSearchCtrl, 'Customer name / number',
+                    width: fieldWidth),
+              if (_tabController.index == 1) ...[
+                _textField(ledgerSearchCtrl, 'Ledger search', width: fieldWidth),
+                _dropdown(
+                  ledgerType,
+                  'Type',
+                  const [
+                    '',
+                    'SALE_CASH',
+                    'SALE_CREDIT',
+                    'REPAYMENT',
+                    'EXPENSE',
+                    'SUPPLIER_PAYMENT',
+                    'INCOME',
+                    'OPENING_DEPOSIT',
+                    'WITHDRAWAL',
+                    'SUBSCRIPTION',
+                    'OUTSTANDING'
                   ],
-                  if (_tabController.index == 2)
-                    _textField(expenseCategoryCtrl, 'Expense type',
-                        width: fieldWidth),
-                  if (_tabController.index == 3)
-                    _textField(incomeSearchCtrl, 'Income source / note',
-                        width: fieldWidth),
-                  if (_tabController.index == 4)
-                    _textField(
-                        withdrawalSearchCtrl, 'Withdrawal purpose / note',
-                        width: fieldWidth),
-                  if (_tabController.index == 6) ...[
-                    _textField(deliverySearchCtrl, 'Customer / Bill search',
-                        width: fieldWidth),
-                    _dropdown(
-                      deliveryStatus,
-                      'Status',
-                      const ['', 'PAID', 'PARTIAL', 'UNPAID'],
-                      (v) => setState(() => deliveryStatus = v ?? ''),
-                      width: narrowFieldWidth,
-                    ),
-                  ],
-                  if (_tabController.index == 7) ...[
-                    _textField(expirySearchCtrl, 'Item search',
-                        width: fieldWidth),
-                    _dropdown(
-                      expiryStatus,
-                      'Status',
-                      const ['ALL', 'NEAR_EXPIRY', 'EXPIRED', 'SAFE'],
-                      (v) => setState(() => expiryStatus = v ?? 'ALL'),
-                      width: narrowFieldWidth,
-                    ),
-                    SizedBox(
-                      width: narrowFieldWidth,
-                      child: TextField(
-                        controller: alertDaysCtrl,
-                        decoration:
-                            const InputDecoration(labelText: 'Alert Days'),
-                      ),
-                    ),
-                  ],
-                  SizedBox(
-                    width: isMedium ? null : constraints.maxWidth,
-                    child: FilledButton.icon(
-                      onPressed: _loadCurrentTab,
-                      icon: const Icon(Icons.search),
-                      label: const Text('Apply'),
-                    ),
+                  (v) => setState(() => ledgerType = v ?? ''),
+                  width: narrowFieldWidth,
+                ),
+                _dropdown(
+                  ledgerPaymentMethod,
+                  'Payment',
+                  const ['', 'CASH', 'CARD', 'UPI', 'BANK', 'CREDIT', 'SUBSCRIPTION'],
+                  (v) => setState(() => ledgerPaymentMethod = v ?? ''),
+                  width: narrowFieldWidth,
+                ),
+              ],
+              if (_tabController.index == 2)
+                _textField(expenseCategoryCtrl, 'Expense type',
+                    width: fieldWidth),
+              if (_tabController.index == 3)
+                _textField(incomeSearchCtrl, 'Income source / note',
+                    width: fieldWidth),
+              if (_tabController.index == 4)
+                _textField(withdrawalSearchCtrl, 'Withdrawal purpose / note',
+                    width: fieldWidth),
+              if (_tabController.index == 6) ...[
+                _textField(deliverySearchCtrl, 'Customer / Bill search',
+                    width: fieldWidth),
+                _dropdown(
+                  deliveryStatus,
+                  'Status',
+                  const ['', 'PAID', 'PARTIAL', 'UNPAID'],
+                  (v) => setState(() => deliveryStatus = v ?? ''),
+                  width: narrowFieldWidth,
+                ),
+              ],
+              if (_tabController.index == 7) ...[
+                _textField(expirySearchCtrl, 'Item search', width: fieldWidth),
+                _dropdown(
+                  expiryStatus,
+                  'Status',
+                  const ['ALL', 'NEAR_EXPIRY', 'EXPIRED', 'SAFE'],
+                  (v) => setState(() => expiryStatus = v ?? 'ALL'),
+                  width: narrowFieldWidth,
+                ),
+                SizedBox(
+                  width: narrowFieldWidth,
+                  child: TextField(
+                    controller: alertDaysCtrl,
+                    decoration: const InputDecoration(labelText: 'Alert Days'),
                   ),
-                ],
+                ),
+              ],
+              SizedBox(
+                width: isMedium ? null : constraints.maxWidth,
+                child: FilledButton.icon(
+                  onPressed: _loadCurrentTab,
+                  icon: const Icon(Icons.search),
+                  label: const Text('Apply'),
+                ),
               ),
-            ),
+            ],
+          ),
+        ),
           ),
         );
       },
@@ -3868,32 +3373,26 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
         return false;
       }
       if (!_showAllCustomers) {
-        return customer.totalAdvance > 0.009 ||
-            customer.totalOutstanding > 0.009;
+        return customer.totalAdvance > 0.009 || customer.totalOutstanding > 0.009;
       }
       return true;
     }).toList();
 
-    Widget miniSummaryText(String label, String value,
-        {bool isHighlight = false}) {
+
+
+    Widget miniSummaryText(String label, String value, {bool isHighlight = false}) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: isHighlight ? Colors.red.shade50 : Colors.white,
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-              color: isHighlight ? Colors.red.shade100 : Colors.grey.shade200),
+          border: Border.all(color: isHighlight ? Colors.red.shade100 : Colors.grey.shade200),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('$label: ',
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-            Text(value,
-                style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: isHighlight ? Colors.red.shade700 : Colors.black87)),
+            Text('$label: ', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+            Text(value, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isHighlight ? Colors.red.shade700 : Colors.black87)),
           ],
         ),
       );
@@ -3910,9 +3409,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
               // KPIs Grid
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final cols = constraints.maxWidth > 550
-                      ? 3
-                      : (constraints.maxWidth > 350 ? 2 : 1);
+                  final cols = constraints.maxWidth > 550 ? 3 : (constraints.maxWidth > 350 ? 2 : 1);
                   return Center(
                     child: ConstrainedBox(
                       constraints: BoxConstraints(
@@ -3924,8 +3421,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                         mainAxisSpacing: 12,
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        childAspectRatio:
-                            cols == 3 ? 2.6 : (cols == 2 ? 2.4 : 3.2),
+                        childAspectRatio: cols == 3 ? 2.6 : (cols == 2 ? 2.4 : 3.2),
                         children: [
                           _buildKpiCard(
                             title: 'Total Outstanding',
@@ -3941,8 +3437,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                           ),
                           _buildKpiCard(
                             title: 'Net Outstanding',
-                            value: _money(
-                                ctrl.totalOutstanding - ctrl.totalAdvance),
+                            value: _money(ctrl.totalOutstanding - ctrl.totalAdvance),
                             icon: Icons.payments_rounded,
                             color: const Color(0xFF2563EB),
                           ),
@@ -3983,11 +3478,9 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                 : null,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide:
-                                  BorderSide(color: Colors.grey.shade300),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
                             ),
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 12),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                           ),
                           onSubmitted: (_) => _loadCurrentTab(),
                         ),
@@ -3998,8 +3491,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                         icon: const Icon(Icons.search, size: 16),
                         label: const Text('Search'),
                         style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 20, vertical: 14),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -4046,25 +3538,17 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                     children: [
                       FilterChip(
                         avatar: Icon(
-                          _showAllCustomers
-                              ? Icons.people_alt
-                              : Icons.people_outline,
+                          _showAllCustomers ? Icons.people_alt : Icons.people_outline,
                           size: 16,
-                          color: _showAllCustomers
-                              ? const Color(0xFF2563EB)
-                              : Colors.grey.shade600,
+                          color: _showAllCustomers ? const Color(0xFF2563EB) : Colors.grey.shade600,
                         ),
                         label: const Text('Show All Customers'),
                         selected: _showAllCustomers,
                         selectedColor: const Color(0xFFEFF6FF),
                         checkmarkColor: const Color(0xFF2563EB),
                         labelStyle: TextStyle(
-                          color: _showAllCustomers
-                              ? const Color(0xFF2563EB)
-                              : Colors.grey.shade700,
-                          fontWeight: _showAllCustomers
-                              ? FontWeight.bold
-                              : FontWeight.normal,
+                          color: _showAllCustomers ? const Color(0xFF2563EB) : Colors.grey.shade700,
+                          fontWeight: _showAllCustomers ? FontWeight.bold : FontWeight.normal,
                           fontSize: 12,
                         ),
                         onSelected: (val) {
@@ -4080,12 +3564,8 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                         selectedColor: const Color(0xFFEFF6FF),
                         checkmarkColor: const Color(0xFF2563EB),
                         labelStyle: TextStyle(
-                          color: _showOutstandingOnly
-                              ? const Color(0xFF2563EB)
-                              : Colors.grey.shade700,
-                          fontWeight: _showOutstandingOnly
-                              ? FontWeight.bold
-                              : FontWeight.normal,
+                          color: _showOutstandingOnly ? const Color(0xFF2563EB) : Colors.grey.shade700,
+                          fontWeight: _showOutstandingOnly ? FontWeight.bold : FontWeight.normal,
                           fontSize: 12,
                         ),
                         onSelected: (val) {
@@ -4099,8 +3579,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) =>
-                                  const CreditAnalysisScreen(),
+                              builder: (context) => const CreditAnalysisScreen(),
                             ),
                           ).then((_) {
                             _loadCurrentTab();
@@ -4110,8 +3589,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                         label: const Text('Credit Analysis'),
                         style: TextButton.styleFrom(
                           foregroundColor: const Color(0xFF2563EB),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -4128,14 +3606,10 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
               else
                 ...customers.map((customer) {
                   final hasOutstanding = customer.totalOutstanding > 0.009;
-                  final unpaidBills = customer.bills
-                      .where((b) => b.outstanding > 0.009)
-                      .toList()
+                  final unpaidBills = customer.bills.where((b) => b.outstanding > 0.009).toList()
                     ..sort((a, b) => b.billDate.compareTo(a.billDate));
-                  final isBillsExpanded =
-                      _expandedBillsCustomers.contains(customer.customerPhone);
-                  final isAdvancesExpanded = _expandedAdvancesCustomers
-                      .contains(customer.customerPhone);
+                  final isBillsExpanded = _expandedBillsCustomers.contains(customer.customerPhone);
+                  final isAdvancesExpanded = _expandedAdvancesCustomers.contains(customer.customerPhone);
 
                   // Extract Initials
                   String initials = '';
@@ -4184,8 +3658,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                   const SizedBox(width: 14),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Row(
                                           children: [
@@ -4201,18 +3674,13 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                               ),
                                             ),
                                             const SizedBox(width: 6),
-                                            const Icon(
-                                                Icons.arrow_forward_ios_rounded,
-                                                size: 12,
-                                                color: Colors.grey),
+                                            const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: Colors.grey),
                                           ],
                                         ),
                                         const SizedBox(height: 2),
                                         Row(
                                           children: [
-                                            Icon(Icons.phone,
-                                                size: 12,
-                                                color: Colors.grey.shade500),
+                                            Icon(Icons.phone, size: 12, color: Colors.grey.shade500),
                                             const SizedBox(width: 4),
                                             Text(
                                               customer.customerPhone,
@@ -4223,17 +3691,13 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                             ),
                                           ],
                                         ),
-                                        if (customer.customerGstin
-                                            .trim()
-                                            .isNotEmpty) ...[
+                                        if (customer.customerGstin.trim().isNotEmpty) ...[
                                           const SizedBox(height: 4),
                                           Container(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 8, vertical: 2),
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                             decoration: BoxDecoration(
                                               color: const Color(0xFFF1F5F9),
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
+                                              borderRadius: BorderRadius.circular(6),
                                             ),
                                             child: Text(
                                               'GST: ${customer.customerGstin}',
@@ -4256,18 +3720,14 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                         children: [
                                           Text(
                                             'Outstanding: ',
-                                            style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey.shade600),
+                                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                                           ),
                                           Text(
                                             _money(customer.totalOutstanding),
                                             style: TextStyle(
                                               fontSize: 13,
                                               fontWeight: FontWeight.bold,
-                                              color: hasOutstanding
-                                                  ? const Color(0xFFEF4444)
-                                                  : Colors.grey.shade800,
+                                              color: hasOutstanding ? const Color(0xFFEF4444) : Colors.grey.shade800,
                                             ),
                                           ),
                                         ],
@@ -4277,9 +3737,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                         children: [
                                           Text(
                                             'Advance: ',
-                                            style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey.shade600),
+                                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                                           ),
                                           Text(
                                             _money(customer.totalAdvance),
@@ -4307,10 +3765,8 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                             runSpacing: 10,
                             children: [
                               FilledButton.tonalIcon(
-                                onPressed: () =>
-                                    _showCustomerLedgerDialog(customer),
-                                icon: const Icon(Icons.receipt_long_rounded,
-                                    size: 16),
+                                onPressed: () => _showCustomerLedgerDialog(customer),
+                                icon: const Icon(Icons.receipt_long_rounded, size: 16),
                                 label: const Text('Complete Ledger'),
                                 style: FilledButton.styleFrom(
                                   backgroundColor: const Color(0xFFEFF6FF),
@@ -4321,29 +3777,17 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                 ),
                               ),
                               (() {
-                                final nonSubAdvance = customer.advances
-                                    .where((e) {
+                                final nonSubAdvance = customer.advances.where((e) {
                                   if (e.availableAmount <= 0.009) return false;
-                                  final isSubMode =
-                                      e.paymentMode.toUpperCase() ==
-                                          'SUBSCRIPTION';
-                                  final isSubRef = e.referenceNo
-                                      .toUpperCase()
-                                      .contains('SUBSCRIPTION');
-                                  final isSubNote = e.note
-                                      .toLowerCase()
-                                      .contains('subscription');
+                                  final isSubMode = e.paymentMode.toUpperCase() == 'SUBSCRIPTION';
+                                  final isSubRef = e.referenceNo.toUpperCase().contains('SUBSCRIPTION');
+                                  final isSubNote = e.note.toLowerCase().contains('subscription');
                                   return !(isSubMode || isSubRef || isSubNote);
-                                }).fold<double>(
-                                        0, (sum, e) => sum + e.availableAmount);
-                                if (nonSubAdvance <= 0.009)
-                                  return const SizedBox.shrink();
+                                }).fold<double>(0, (sum, e) => sum + e.availableAmount);
+                                if (nonSubAdvance <= 0.009) return const SizedBox.shrink();
                                 return FilledButton.icon(
-                                  onPressed: () =>
-                                      _showRefundAdvanceDialog(customer),
-                                  icon: const Icon(
-                                      Icons.keyboard_return_rounded,
-                                      size: 16),
+                                  onPressed: () => _showRefundAdvanceDialog(customer),
+                                  icon: const Icon(Icons.keyboard_return_rounded, size: 16),
                                   label: const Text('Refund Advance'),
                                   style: FilledButton.styleFrom(
                                     backgroundColor: const Color(0xFFDC2626),
@@ -4355,8 +3799,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                               })(),
                               FilledButton.icon(
                                 onPressed: hasOutstanding
-                                    ? () => _showBulkRepaymentDialog(
-                                        customer, unpaidBills)
+                                    ? () => _showBulkRepaymentDialog(customer, unpaidBills)
                                     : null,
                                 icon: const Icon(Icons.payment, size: 16),
                                 label: const Text('Bulk Pay'),
@@ -4373,30 +3816,21 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                 onPressed: () {
                                   setState(() {
                                     if (isBillsExpanded) {
-                                      _expandedBillsCustomers
-                                          .remove(customer.customerPhone);
+                                      _expandedBillsCustomers.remove(customer.customerPhone);
                                     } else {
-                                      _expandedBillsCustomers
-                                          .add(customer.customerPhone);
+                                      _expandedBillsCustomers.add(customer.customerPhone);
                                     }
                                   });
                                 },
                                 icon: Icon(
-                                  isBillsExpanded
-                                      ? Icons.expand_less
-                                      : Icons.expand_more,
+                                  isBillsExpanded ? Icons.expand_less : Icons.expand_more,
                                   size: 16,
                                 ),
-                                label:
-                                    Text('Show Bills (${unpaidBills.length})'),
+                                label: Text('Show Bills (${unpaidBills.length})'),
                                 style: OutlinedButton.styleFrom(
-                                  foregroundColor: isBillsExpanded
-                                      ? const Color(0xFF2563EB)
-                                      : Colors.grey.shade700,
+                                  foregroundColor: isBillsExpanded ? const Color(0xFF2563EB) : Colors.grey.shade700,
                                   side: BorderSide(
-                                    color: isBillsExpanded
-                                        ? const Color(0xFF2563EB)
-                                        : Colors.grey.shade300,
+                                    color: isBillsExpanded ? const Color(0xFF2563EB) : Colors.grey.shade300,
                                   ),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
@@ -4407,30 +3841,21 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                 onPressed: () {
                                   setState(() {
                                     if (isAdvancesExpanded) {
-                                      _expandedAdvancesCustomers
-                                          .remove(customer.customerPhone);
+                                      _expandedAdvancesCustomers.remove(customer.customerPhone);
                                     } else {
-                                      _expandedAdvancesCustomers
-                                          .add(customer.customerPhone);
+                                      _expandedAdvancesCustomers.add(customer.customerPhone);
                                     }
                                   });
                                 },
                                 icon: Icon(
-                                  isAdvancesExpanded
-                                      ? Icons.expand_less
-                                      : Icons.expand_more,
+                                  isAdvancesExpanded ? Icons.expand_less : Icons.expand_more,
                                   size: 16,
                                 ),
-                                label: Text(
-                                    'Show Advances (${customer.advances.length})'),
+                                label: Text('Show Advances (${customer.advances.length})'),
                                 style: OutlinedButton.styleFrom(
-                                  foregroundColor: isAdvancesExpanded
-                                      ? const Color(0xFF16A34A)
-                                      : Colors.grey.shade700,
+                                  foregroundColor: isAdvancesExpanded ? const Color(0xFF16A34A) : Colors.grey.shade700,
                                   side: BorderSide(
-                                    color: isAdvancesExpanded
-                                        ? const Color(0xFF16A34A)
-                                        : Colors.grey.shade300,
+                                    color: isAdvancesExpanded ? const Color(0xFF16A34A) : Colors.grey.shade300,
                                   ),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
@@ -4464,127 +3889,81 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                   const SizedBox(height: 10),
                                   if (unpaidBills.isEmpty)
                                     const Padding(
-                                      padding:
-                                          EdgeInsets.symmetric(vertical: 12),
+                                      padding: EdgeInsets.symmetric(vertical: 12),
                                       child: Center(
                                         child: Text(
                                           'No outstanding bills for this customer.',
-                                          style: TextStyle(
-                                              color: Colors.grey, fontSize: 13),
+                                          style: TextStyle(color: Colors.grey, fontSize: 13),
                                         ),
                                       ),
                                     )
                                   else
                                     ...unpaidBills.map((bill) {
                                       return Container(
-                                        margin: const EdgeInsets.symmetric(
-                                            vertical: 6),
+                                        margin: const EdgeInsets.symmetric(vertical: 6),
                                         padding: const EdgeInsets.all(12),
                                         decoration: BoxDecoration(
                                           color: Colors.white,
-                                          borderRadius:
-                                              BorderRadius.circular(10),
-                                          border: Border.all(
-                                              color: Colors.grey.shade200),
+                                          borderRadius: BorderRadius.circular(10),
+                                          border: Border.all(color: Colors.grey.shade200),
                                         ),
                                         child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
+                                          crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
                                             Row(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment
-                                                      .spaceBetween,
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                               children: [
                                                 Expanded(
                                                   child: Column(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .start,
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
                                                     children: [
                                                       Row(
                                                         children: [
                                                           InkWell(
-                                                            onTap: () =>
-                                                                _showSaleBillPreviewDialog(
-                                                                    bill.billNo,
-                                                                    customer:
-                                                                        customer),
+                                                            onTap: () => _showSaleBillPreviewDialog(bill.billNo, customer: customer),
                                                             child: Row(
-                                                              mainAxisSize:
-                                                                  MainAxisSize
-                                                                      .min,
+                                                              mainAxisSize: MainAxisSize.min,
                                                               children: [
                                                                 Text(
                                                                   bill.billNo,
-                                                                  style:
-                                                                      const TextStyle(
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .bold,
-                                                                    fontSize:
-                                                                        14,
-                                                                    color: Color(
-                                                                        0xFF2563EB),
-                                                                    decoration:
-                                                                        TextDecoration
-                                                                            .underline,
+                                                                  style: const TextStyle(
+                                                                    fontWeight: FontWeight.bold,
+                                                                    fontSize: 14,
+                                                                    color: Color(0xFF2563EB),
+                                                                    decoration: TextDecoration.underline,
                                                                   ),
                                                                 ),
-                                                                const SizedBox(
-                                                                    width: 4),
-                                                                const Icon(
-                                                                    Icons
-                                                                        .visibility_outlined,
-                                                                    size: 15,
-                                                                    color: Color(
-                                                                        0xFF2563EB)),
+                                                                const SizedBox(width: 4),
+                                                                const Icon(Icons.visibility_outlined, size: 15, color: Color(0xFF2563EB)),
                                                               ],
                                                             ),
                                                           ),
-                                                          const SizedBox(
-                                                              width: 8),
+                                                          const SizedBox(width: 8),
                                                           Text(
-                                                            _fmtDate(
-                                                                bill.billDate),
+                                                            _fmtDate(bill.billDate),
                                                             style: TextStyle(
                                                               fontSize: 12,
-                                                              color: Colors.grey
-                                                                  .shade600,
+                                                              color: Colors.grey.shade600,
                                                             ),
                                                           ),
                                                         ],
                                                       ),
                                                       const SizedBox(height: 4),
                                                       Container(
-                                                        padding:
-                                                            const EdgeInsets
-                                                                .symmetric(
-                                                                horizontal: 8,
-                                                                vertical: 3),
-                                                        decoration:
-                                                            BoxDecoration(
-                                                          color: const Color(
-                                                              0xFFF1F5F9),
-                                                          borderRadius:
-                                                              BorderRadius
-                                                                  .circular(6),
-                                                          border: Border.all(
-                                                              color: const Color(
-                                                                  0xFFE2E8F0)),
+                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                        decoration: BoxDecoration(
+                                                          color: const Color(0xFFF1F5F9),
+                                                          borderRadius: BorderRadius.circular(6),
+                                                          border: Border.all(color: const Color(0xFFE2E8F0)),
                                                         ),
                                                         child: Text(
                                                           'Credit: ${_money(bill.amount)} - Paid: ${_money(bill.totalPaid)} = Outstanding: ${_money(bill.outstanding)}',
                                                           style: TextStyle(
                                                             fontSize: 11.5,
-                                                            fontWeight:
-                                                                FontWeight.w700,
-                                                            color: bill.outstanding >
-                                                                    0.009
-                                                                ? const Color(
-                                                                    0xFFDC2626)
-                                                                : const Color(
-                                                                    0xFF16A34A),
+                                                            fontWeight: FontWeight.w700,
+                                                            color: bill.outstanding > 0.009
+                                                                ? const Color(0xFFDC2626)
+                                                                : const Color(0xFF16A34A),
                                                           ),
                                                         ),
                                                       ),
@@ -4600,90 +3979,53 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                               spacing: 8,
                                               runSpacing: 6,
                                               children: [
-                                                miniSummaryText('Credit Amount',
-                                                    _money(bill.amount)),
+                                                miniSummaryText('Credit Amount', _money(bill.amount)),
                                                 if (bill.initialPaid > 0.009)
-                                                  miniSummaryText(
-                                                      'Initial Paid',
-                                                      _money(bill.initialPaid)),
-                                                miniSummaryText(
-                                                    'Repaid',
-                                                    _money(
-                                                        bill.repaymentTotal)),
-                                                miniSummaryText('Total Paid',
-                                                    _money(bill.totalPaid)),
-                                                miniSummaryText('Outstanding',
-                                                    _money(bill.outstanding),
-                                                    isHighlight: true),
+                                                  miniSummaryText('Initial Paid', _money(bill.initialPaid)),
+                                                miniSummaryText('Repaid', _money(bill.repaymentTotal)),
+                                                miniSummaryText('Total Paid', _money(bill.totalPaid)),
+                                                miniSummaryText('Outstanding', _money(bill.outstanding), isHighlight: true),
                                               ],
                                             ),
                                             const SizedBox(height: 8),
                                             Row(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.end,
+                                              mainAxisAlignment: MainAxisAlignment.end,
                                               children: [
                                                 TextButton.icon(
-                                                  onPressed: () =>
-                                                      _showSaleBillPreviewDialog(
-                                                          bill.billNo,
-                                                          customer: customer),
-                                                  icon: const Icon(
-                                                      Icons.visibility_outlined,
-                                                      size: 14,
-                                                      color: Color(0xFF2563EB)),
-                                                  label: const Text('View Bill',
-                                                      style: TextStyle(
-                                                          fontSize: 12,
-                                                          color: Color(
-                                                              0xFF2563EB))),
+                                                  onPressed: () => _showSaleBillPreviewDialog(bill.billNo, customer: customer),
+                                                  icon: const Icon(Icons.visibility_outlined, size: 14, color: Color(0xFF2563EB)),
+                                                  label: const Text('View Bill', style: TextStyle(fontSize: 12, color: Color(0xFF2563EB))),
                                                 ),
                                                 const SizedBox(width: 8),
                                                 TextButton.icon(
-                                                  onPressed: () =>
-                                                      _showRepaymentDialog(
-                                                          bill),
-                                                  icon: const Icon(
-                                                      Icons.payment,
-                                                      size: 14),
-                                                  label: const Text('Repayment',
-                                                      style: TextStyle(
-                                                          fontSize: 12)),
+                                                  onPressed: () => _showRepaymentDialog(bill),
+                                                  icon: const Icon(Icons.payment, size: 14),
+                                                  label: const Text('Repayment', style: TextStyle(fontSize: 12)),
                                                 ),
                                                 const SizedBox(width: 8),
                                                 TextButton.icon(
-                                                  onPressed: bill.outstanding >
-                                                          0.009
-                                                      ? () =>
-                                                          _showWaiveOffDialog(
-                                                              bill)
+                                                  onPressed: bill.outstanding > 0.009
+                                                      ? () => _showWaiveOffDialog(bill)
                                                       : null,
-                                                  icon: const Icon(
-                                                      Icons.money_off,
-                                                      size: 14),
-                                                  label: const Text('Waive Off',
-                                                      style: TextStyle(
-                                                          fontSize: 12)),
+                                                  icon: const Icon(Icons.money_off, size: 14),
+                                                  label: const Text('Waive Off', style: TextStyle(fontSize: 12)),
                                                   style: TextButton.styleFrom(
-                                                    foregroundColor:
-                                                        const Color(0xFFEF4444),
+                                                    foregroundColor: const Color(0xFFEF4444),
                                                   ),
                                                 ),
                                               ],
                                             ),
                                             if (bill.payments.isNotEmpty) ...[
                                               const Divider(height: 16),
-                                              const Row(
+                                              Row(
                                                 children: [
-                                                  Icon(Icons.history,
-                                                      size: 14,
-                                                      color: Color(0xFF64748B)),
-                                                  SizedBox(width: 4),
-                                                  Text(
+                                                  const Icon(Icons.history, size: 14, color: Color(0xFF64748B)),
+                                                  const SizedBox(width: 4),
+                                                  const Text(
                                                     'Repayment History & Running Balance',
                                                     style: TextStyle(
                                                       fontSize: 11,
-                                                      fontWeight:
-                                                          FontWeight.bold,
+                                                      fontWeight: FontWeight.bold,
                                                       color: Color(0xFF64748B),
                                                     ),
                                                   ),
@@ -4691,113 +4033,63 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                               ),
                                               const SizedBox(height: 6),
                                               (() {
-                                                double runningDue =
-                                                    bill.amount -
-                                                        bill.initialPaid;
+                                                double runningDue = bill.amount - bill.initialPaid;
                                                 return Column(
-                                                  children: bill.payments
-                                                      .asMap()
-                                                      .entries
-                                                      .map((entry) {
+                                                  children: bill.payments.asMap().entries.map((entry) {
                                                     final index = entry.key;
                                                     final payment = entry.value;
-                                                    final beforeBal =
-                                                        runningDue;
-                                                    runningDue = (runningDue -
-                                                            payment.amount)
-                                                        .clamp(0.0,
-                                                            double.infinity);
+                                                    final beforeBal = runningDue;
+                                                    runningDue = (runningDue - payment.amount).clamp(0.0, double.infinity);
                                                     return Container(
-                                                      margin: const EdgeInsets
-                                                          .symmetric(
-                                                          vertical: 4),
-                                                      padding:
-                                                          const EdgeInsets.all(
-                                                              8),
+                                                      margin: const EdgeInsets.symmetric(vertical: 4),
+                                                      padding: const EdgeInsets.all(8),
                                                       decoration: BoxDecoration(
-                                                        color: const Color(
-                                                            0xFFF8FAFC),
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(8),
-                                                        border: Border.all(
-                                                            color: Colors
-                                                                .grey.shade200),
+                                                        color: const Color(0xFFF8FAFC),
+                                                        borderRadius: BorderRadius.circular(8),
+                                                        border: Border.all(color: Colors.grey.shade200),
                                                       ),
                                                       child: Row(
-                                                        mainAxisAlignment:
-                                                            MainAxisAlignment
-                                                                .spaceBetween,
+                                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                                         children: [
                                                           Expanded(
                                                             child: Column(
-                                                              crossAxisAlignment:
-                                                                  CrossAxisAlignment
-                                                                      .start,
+                                                              crossAxisAlignment: CrossAxisAlignment.start,
                                                               children: [
                                                                 Text(
                                                                   'Payment #${index + 1}: ${_paymentModeLabel(payment.paymentMode)} - ${_money(payment.amount)}',
-                                                                  style:
-                                                                      const TextStyle(
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .bold,
-                                                                    fontSize:
-                                                                        11.5,
-                                                                    color: Color(
-                                                                        0xFF1E293B),
+                                                                  style: const TextStyle(
+                                                                    fontWeight: FontWeight.bold,
+                                                                    fontSize: 11.5,
+                                                                    color: Color(0xFF1E293B),
                                                                   ),
                                                                 ),
-                                                                const SizedBox(
-                                                                    height: 2),
+                                                                const SizedBox(height: 2),
                                                                 Text(
                                                                   '${_fmtDate(payment.paymentDate)} • Voucher: ${payment.referenceNo.startsWith('RV-') ? payment.referenceNo : (payment.referenceNo.isNotEmpty ? 'RV-${payment.referenceNo}' : 'RV-PAY-${payment.id}')}',
-                                                                  style:
-                                                                      const TextStyle(
-                                                                    fontSize:
-                                                                        10,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w600,
-                                                                    color: Color(
-                                                                        0xFF0B5CAD),
+                                                                  style: const TextStyle(
+                                                                    fontSize: 10,
+                                                                    fontWeight: FontWeight.w600,
+                                                                    color: Color(0xFF0B5CAD),
                                                                   ),
                                                                 ),
-                                                                const SizedBox(
-                                                                    height: 2),
+                                                                const SizedBox(height: 2),
                                                                 Text(
                                                                   'Due: ${_money(beforeBal)} - ${_money(payment.amount)} = Remaining: ${_money(runningDue)}',
-                                                                  style:
-                                                                      TextStyle(
-                                                                    fontSize:
-                                                                        10.5,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w600,
-                                                                    color: runningDue >
-                                                                            0.009
-                                                                        ? const Color(
-                                                                            0xFFDC2626)
-                                                                        : const Color(
-                                                                            0xFF16A34A),
+                                                                  style: TextStyle(
+                                                                    fontSize: 10.5,
+                                                                    fontWeight: FontWeight.w600,
+                                                                    color: runningDue > 0.009
+                                                                        ? const Color(0xFFDC2626)
+                                                                        : const Color(0xFF16A34A),
                                                                   ),
                                                                 ),
-                                                                if (payment.note
-                                                                    .trim()
-                                                                    .isNotEmpty) ...[
-                                                                  const SizedBox(
-                                                                      height:
-                                                                          2),
+                                                                if (payment.note.trim().isNotEmpty) ...[
+                                                                  const SizedBox(height: 2),
                                                                   Text(
-                                                                    payment
-                                                                        .note,
-                                                                    style:
-                                                                        const TextStyle(
-                                                                      fontSize:
-                                                                          10,
-                                                                      fontStyle:
-                                                                          FontStyle
-                                                                              .italic,
+                                                                    payment.note,
+                                                                    style: const TextStyle(
+                                                                      fontSize: 10,
+                                                                      fontStyle: FontStyle.italic,
                                                                     ),
                                                                   ),
                                                                 ],
@@ -4805,23 +4097,11 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                                             ),
                                                           ),
                                                           IconButton(
-                                                            padding:
-                                                                EdgeInsets.zero,
-                                                            constraints:
-                                                                const BoxConstraints(),
-                                                            icon: const Icon(
-                                                                Icons
-                                                                    .edit_outlined,
-                                                                size: 16,
-                                                                color: Colors
-                                                                    .blue),
-                                                            tooltip:
-                                                                'Edit Repayment',
-                                                            onPressed: () =>
-                                                                _showRepaymentDialog(
-                                                                    bill,
-                                                                    payment:
-                                                                        payment),
+                                                            padding: EdgeInsets.zero,
+                                                            constraints: const BoxConstraints(),
+                                                            icon: const Icon(Icons.edit_outlined, size: 16, color: Colors.blue),
+                                                            tooltip: 'Edit Repayment',
+                                                            onPressed: () => _showRepaymentDialog(bill, payment: payment),
                                                           ),
                                                         ],
                                                       ),
@@ -4863,101 +4143,73 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                   const SizedBox(height: 10),
                                   if (customer.advances.isEmpty)
                                     const Padding(
-                                      padding:
-                                          EdgeInsets.symmetric(vertical: 12),
+                                      padding: EdgeInsets.symmetric(vertical: 12),
                                       child: Center(
                                         child: Text(
                                           'No advance transactions found.',
-                                          style: TextStyle(
-                                              color: Colors.grey, fontSize: 13),
+                                          style: TextStyle(color: Colors.grey, fontSize: 13),
                                         ),
                                       ),
                                     )
                                   else
                                     ...customer.advances.map((advance) {
                                       return Container(
-                                        margin: const EdgeInsets.symmetric(
-                                            vertical: 4),
+                                        margin: const EdgeInsets.symmetric(vertical: 4),
                                         padding: const EdgeInsets.all(12),
                                         decoration: BoxDecoration(
                                           color: Colors.white,
-                                          borderRadius:
-                                              BorderRadius.circular(10),
-                                          border: Border.all(
-                                              color: Colors.grey.shade200),
+                                          borderRadius: BorderRadius.circular(10),
+                                          border: Border.all(color: Colors.grey.shade200),
                                         ),
                                         child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                           children: [
                                             Expanded(
                                               child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
+                                                crossAxisAlignment: CrossAxisAlignment.start,
                                                 children: [
                                                   Text(
                                                     '${advance.paymentMode} - Original: ${_money(advance.originalAmount)}',
                                                     style: const TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.bold,
+                                                      fontWeight: FontWeight.bold,
                                                       fontSize: 13,
                                                       color: Color(0xFF15803D),
                                                     ),
                                                   ),
                                                   const SizedBox(height: 2),
                                                   (() {
-                                                    final breakdown =
-                                                        _parseAdvanceBreakdown(
-                                                            advance);
-                                                    final avail =
-                                                        breakdown['available']!;
-                                                    final refunded =
-                                                        breakdown['refunded']!;
-                                                    final consumed =
-                                                        breakdown['consumed']!;
+                                                    final breakdown = _parseAdvanceBreakdown(advance);
+                                                    final avail = breakdown['available']!;
+                                                    final refunded = breakdown['refunded']!;
+                                                    final consumed = breakdown['consumed']!;
 
-                                                    final List<String> parts =
-                                                        [];
-                                                    parts.add(
-                                                        'Available: ${_money(avail)}');
+                                                    final List<String> parts = [];
+                                                    parts.add('Available: ${_money(avail)}');
                                                     if (consumed > 0.009) {
-                                                      parts.add(
-                                                          'Consumed: ${_money(consumed)}');
+                                                      parts.add('Consumed: ${_money(consumed)}');
                                                     }
                                                     if (refunded > 0.009) {
-                                                      parts.add(
-                                                          'Refunded: ${_money(refunded)}');
+                                                      parts.add('Refunded: ${_money(refunded)}');
                                                     }
                                                     return Text(
                                                       '${_fmtDate(advance.advanceDate)} - ${parts.join(" | ")}',
                                                       style: TextStyle(
                                                         fontSize: 12,
-                                                        color: Colors
-                                                            .grey.shade700,
+                                                        color: Colors.grey.shade700,
                                                       ),
                                                     );
                                                   })(),
                                                   Text(
                                                     'Voucher No: ${advance.referenceNo.startsWith('RV-') ? advance.referenceNo : (advance.referenceNo.isNotEmpty ? 'RV-${advance.referenceNo}' : 'RV-ADV-${advance.id}')}',
-                                                    style: const TextStyle(
-                                                        fontSize: 11,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        color:
-                                                            Color(0xFF0B5CAD)),
+                                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0B5CAD)),
                                                   ),
-                                                  if (_cleanAdvanceNote(
-                                                          advance.note)
-                                                      .isNotEmpty)
+                                                  if (_cleanAdvanceNote(advance.note).isNotEmpty)
                                                     Text(
-                                                      _cleanAdvanceNote(
-                                                          advance.note),
+                                                      _cleanAdvanceNote(advance.note),
                                                       style: TextStyle(
                                                         fontSize: 11,
-                                                        fontStyle:
-                                                            FontStyle.italic,
-                                                        color: Colors
-                                                            .grey.shade600,
+                                                        fontStyle: FontStyle.italic,
+                                                        color: Colors.grey.shade600,
                                                       ),
                                                     ),
                                                 ],
@@ -4965,23 +4217,12 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                             ),
                                             const SizedBox(width: 8),
                                             TextButton.icon(
-                                              onPressed: () =>
-                                                  _navigateToLedgerForAdvance(
-                                                      customer, advance),
-                                              icon: const Icon(
-                                                  Icons.list_alt_rounded,
-                                                  size: 16),
-                                              label: const Text(
-                                                  'Show Transactions',
-                                                  style:
-                                                      TextStyle(fontSize: 12)),
+                                              onPressed: () => _navigateToLedgerForAdvance(customer, advance),
+                                              icon: const Icon(Icons.list_alt_rounded, size: 16),
+                                              label: const Text('Show Transactions', style: TextStyle(fontSize: 12)),
                                               style: TextButton.styleFrom(
-                                                foregroundColor:
-                                                    const Color(0xFF2563EB),
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 4),
+                                                foregroundColor: const Color(0xFF2563EB),
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                               ),
                                             ),
                                           ],
@@ -5110,9 +4351,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                 children: [
                   _buildKpiCard(
                     title: 'Deposit',
-                    value: _money(ctrl.depositTotal > 0
-                        ? ctrl.depositTotal
-                        : ctrl.openingBalance),
+                    value: _money(ctrl.depositTotal > 0 ? ctrl.depositTotal : ctrl.openingBalance),
                     icon: Icons.account_balance_rounded,
                     color: Colors.blueGrey,
                   ),
@@ -5143,9 +4382,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   ...visibleLedgerMethods.map(
                     (entry) => _buildKpiCard(
                       title: entry.paymentMethod,
-                      value: _plainAmount(entry.amountIn > 0
-                          ? entry.amountIn
-                          : entry.amountOut),
+                      value: _plainAmount(entry.amountIn > 0 ? entry.amountIn : entry.amountOut),
                       icon: Icons.payment_rounded,
                       color: const Color(0xFF0F766E),
                     ),
@@ -5163,16 +4400,12 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.info_outline,
-                        color: Colors.indigo, size: 20),
+                    const Icon(Icons.info_outline, color: Colors.indigo, size: 20),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         'Selected range opening deposit: ${_money(ctrl.openingBalance)}. Each day below starts with its deposit row first, then the day transactions.',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                            color: Color(0xFF1E293B)),
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF1E293B)),
                       ),
                     ),
                   ],
@@ -5188,10 +4421,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   final dayCreditTotal = day.entries.fold<double>(
                     0,
                     (sum, entry) {
-                      final isCreditMode = entry.transactionType
-                                  .trim()
-                                  .toUpperCase() ==
-                              'SALE_CREDIT' ||
+                      final isCreditMode = entry.transactionType.trim().toUpperCase() == 'SALE_CREDIT' ||
                           entry.paymentMethod.trim().toUpperCase() == 'CREDIT';
                       return sum + (isCreditMode ? 0.0 : entry.amountIn);
                     },
@@ -5199,14 +4429,9 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   final dayDebitTotal = day.entries.fold<double>(
                     0,
                     (sum, entry) {
-                      final isCreditMode = entry.transactionType
-                                  .trim()
-                                  .toUpperCase() ==
-                              'SALE_CREDIT' ||
+                      final isCreditMode = entry.transactionType.trim().toUpperCase() == 'SALE_CREDIT' ||
                           entry.paymentMethod.trim().toUpperCase() == 'CREDIT';
-                      final rawDebit = entry.amountOut > 0
-                          ? entry.amountOut
-                          : entry.adjustmentAmount;
+                      final rawDebit = entry.amountOut > 0 ? entry.amountOut : entry.adjustmentAmount;
                       return sum + (isCreditMode ? 0.0 : rawDebit);
                     },
                   );
@@ -5218,63 +4443,58 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(color: Colors.grey.shade200),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Wrap(
+                      spacing: 16,
+                      runSpacing: 8,
                       children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: Wrap(
-                            spacing: 16,
-                            runSpacing: 8,
-                            children: [
-                              Text(
-                                _fmtDate(day.date),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                              Text(
-                                'Deposit ${_money(day.openingBalance)}',
-                                style: const TextStyle(
-                                  color: Colors.indigo,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              Text(
-                                'Closing ${_money(day.closingBalance)}',
-                                style: const TextStyle(
-                                  color: Colors.teal,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              Text(
-                                'Methods: ${day.entries.map((e) => e.paymentMethod).where((e) {
-                                      final method = e.trim().toUpperCase();
-                                      return method.isNotEmpty &&
-                                          method != 'ADVANCE' &&
-                                          method != 'CREDIT';
-                                    }).toSet().join(', ')}',
-                                style: const TextStyle(
-                                  color: Colors.black54,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
+                        Text(
+                          _fmtDate(day.date),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
                           ),
                         ),
-                        const SizedBox(height: 10),
-                        _buildLedgerCompactTable(
-                          day: day,
-                          dayOutstandingTotal: dayOutstandingTotal,
-                          dayCreditTotal: dayCreditTotal,
-                          dayDebitTotal: dayDebitTotal,
+                        Text(
+                          'Deposit ${_money(day.openingBalance)}',
+                          style: const TextStyle(
+                            color: Colors.indigo,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Text(
+                          'Closing ${_money(day.closingBalance)}',
+                          style: const TextStyle(
+                            color: Colors.teal,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Text(
+                          'Methods: ${day.entries.map((e) => e.paymentMethod).where((e) { final method = e.trim().toUpperCase(); return method.isNotEmpty && method != 'ADVANCE' && method != 'CREDIT'; }).toSet().join(', ')}',
+                          style: const TextStyle(
+                            color: Colors.black54,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ],
                     ),
-                  );
-                },
+                  ),
+                  const SizedBox(height: 10),
+                  _buildLedgerCompactTable(
+                    day: day,
+                    dayOutstandingTotal: dayOutstandingTotal,
+                    dayCreditTotal: dayCreditTotal,
+                    dayDebitTotal: dayDebitTotal,
+                  ),
+                ],
               ),
+            );
+            },
+          ),
               if (ctrl.ledgerDays.isEmpty)
                 _emptyCard('No ledger entries found.'),
             ],
@@ -5299,35 +4519,20 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
 
     if (type.contains('SALE') || refType == 'SALE') {
       return ref.isNotEmpty ? 'SV-$ref' : 'SV-0001';
-    } else if (type.contains('REPAYMENT') ||
-        type.contains('CREDIT PAYMENT') ||
-        refType == 'REPAYMENT') {
+    } else if (type.contains('REPAYMENT') || type.contains('CREDIT PAYMENT') || refType == 'REPAYMENT') {
       return ref.isNotEmpty ? 'RV-$ref' : 'RV-0001';
-    } else if (type.contains('SUBSCRIPTION') ||
-        type.contains('ADVANCE') ||
-        refType.contains('ADVANCE')) {
-      return ref.isNotEmpty
-          ? (ref.startsWith('RV-') ? ref : 'RV-$ref')
-          : 'RV-0001';
-    } else if (type.contains('SUPPLIER') ||
-        type.contains('VENDOR') ||
-        type.contains('REFUND') ||
-        refType.contains('SUPPLIER')) {
-      return ref.isNotEmpty
-          ? (ref.startsWith('PV-') ? ref : 'PV-$ref')
-          : 'PV-0001';
+    } else if (type.contains('SUBSCRIPTION') || type.contains('ADVANCE') || refType.contains('ADVANCE')) {
+      return ref.isNotEmpty ? (ref.startsWith('RV-') ? ref : 'RV-$ref') : 'RV-0001';
+    } else if (type.contains('SUPPLIER') || type.contains('VENDOR') || type.contains('REFUND') || refType.contains('SUPPLIER')) {
+      return ref.isNotEmpty ? (ref.startsWith('PV-') ? ref : 'PV-$ref') : 'PV-0001';
     } else if (type == 'EXPENSE' || refType == 'EXPENSE') {
       return ref.isNotEmpty ? 'PV-$ref' : 'PV-0001';
     } else if (type == 'INCOME' || refType == 'INCOME') {
       return ref.isNotEmpty ? 'RV-$ref' : 'RV-0001';
-    } else if (type == 'WITHDRAWAL' ||
-        type == 'CONTRA' ||
-        refType == 'WITHDRAWAL') {
+    } else if (type == 'WITHDRAWAL' || type == 'CONTRA' || refType == 'WITHDRAWAL') {
       return ref.isNotEmpty ? 'CN-$ref' : 'CN-0001';
     } else if (type == 'OPENING' || refType == 'OPENING_DEPOSIT') {
-      return ref.isNotEmpty
-          ? (ref.startsWith('RV-') ? ref : 'RV-$ref')
-          : 'RV-OPENING';
+      return ref.isNotEmpty ? (ref.startsWith('RV-') ? ref : 'RV-$ref') : 'RV-OPENING';
     }
     return ref.isNotEmpty ? ref : '-';
   }
@@ -5411,16 +4616,15 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
             ],
           ),
           ...day.entries.map((entry) {
-            final isCreditMode =
-                entry.paymentMethod.trim().toUpperCase() == 'CREDIT';
-            final rawDebit =
-                entry.amountOut > 0 ? entry.amountOut : entry.adjustmentAmount;
+            final isCreditMode = entry.paymentMethod.trim().toUpperCase() == 'CREDIT';
+            final rawDebit = entry.amountOut > 0
+                ? entry.amountOut
+                : entry.adjustmentAmount;
             final debitAmount = isCreditMode ? 0.0 : rawDebit;
             final creditAmount = isCreditMode ? 0.0 : entry.amountIn;
 
-            final isExpense =
-                entry.transactionType.trim().toUpperCase() == 'EXPENSE' ||
-                    entry.referenceType.trim().toUpperCase() == 'EXPENSE';
+            final isExpense = entry.transactionType.trim().toUpperCase() == 'EXPENSE' ||
+                entry.referenceType.trim().toUpperCase() == 'EXPENSE';
 
             Widget wrapCell(Widget cell) {
               if (!isExpense) return cell;
@@ -5441,82 +4645,77 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
               children: [
                 wrapCell(_LedgerCell(_fmtDateTime(entry.txnDate))),
                 wrapCell(_LedgerCell(_ledgerTypeLabel(entry.transactionType))),
-                wrapCell(_LedgerCell(_getVoucherNo(entry),
-                    bold: true, color: Colors.indigo)),
-                wrapCell(_LedgerCell(
-                    entry.partyName.isEmpty ? '-' : entry.partyName)),
-                wrapCell(_LedgerCell(
-                    entry.paymentMethod.isEmpty ? '-' : entry.paymentMethod)),
-                wrapCell(_LedgerCell(_ledgerNote(entry))),
-                wrapCell(_LedgerCell(
-                  _ledgerOutstanding(entry) <= 0
-                      ? '-'
-                      : _money(_ledgerOutstanding(entry)),
-                  align: TextAlign.right,
-                  color:
-                      _ledgerOutstanding(entry) > 0 ? Colors.deepOrange : null,
-                  bold: _ledgerOutstanding(entry) > 0,
-                )),
-                wrapCell(_LedgerCell(
-                  creditAmount <= 0 ? '-' : _money(creditAmount),
-                  align: TextAlign.right,
-                  color: creditAmount > 0 ? Colors.green : null,
-                  bold: creditAmount > 0,
-                )),
-                wrapCell(_LedgerCell(
-                  debitAmount <= 0 ? '-' : _money(debitAmount),
-                  align: TextAlign.right,
-                  color: debitAmount > 0 ? Colors.red : null,
-                  bold: debitAmount > 0,
-                )),
-                wrapCell(_LedgerCell(
-                  _money(entry.balance),
-                  align: TextAlign.right,
-                  color: Colors.indigo,
-                  bold: true,
-                )),
-              ],
-            );
-          }),
-          TableRow(
-            decoration: BoxDecoration(
-              color: Colors.blueGrey.withOpacity(.08),
-            ),
-            children: [
-              const _LedgerCell('DAY TOTAL', bold: true),
-              const _LedgerCell('-'),
-              const _LedgerCell('-'),
-              const _LedgerCell('-'),
-              const _LedgerCell('-'),
-              const _LedgerCell('-'),
-              _LedgerCell(
-                dayOutstandingTotal <= 0 ? '-' : _money(dayOutstandingTotal),
+                wrapCell(_LedgerCell(_getVoucherNo(entry), bold: true, color: Colors.indigo)),
+              wrapCell(_LedgerCell(entry.partyName.isEmpty ? '-' : entry.partyName)),
+              wrapCell(_LedgerCell(entry.paymentMethod.isEmpty ? '-' : entry.paymentMethod)),
+              wrapCell(_LedgerCell(_ledgerNote(entry))),
+              wrapCell(_LedgerCell(
+                _ledgerOutstanding(entry) <= 0 ? '-' : _money(_ledgerOutstanding(entry)),
                 align: TextAlign.right,
-                color: Colors.deepOrange,
-                bold: true,
-              ),
-              _LedgerCell(
-                _money(dayCreditTotal),
+                color: _ledgerOutstanding(entry) > 0 ? Colors.deepOrange : null,
+                bold: _ledgerOutstanding(entry) > 0,
+              )),
+              wrapCell(_LedgerCell(
+                creditAmount <= 0 ? '-' : _money(creditAmount),
                 align: TextAlign.right,
-                color: Colors.green,
-                bold: true,
-              ),
-              _LedgerCell(
-                _money(dayDebitTotal),
+                color: creditAmount > 0 ? Colors.green : null,
+                bold: creditAmount > 0,
+              )),
+              wrapCell(_LedgerCell(
+                debitAmount <= 0 ? '-' : _money(debitAmount),
                 align: TextAlign.right,
-                color: Colors.red,
+                color: debitAmount > 0 ? Colors.red : null,
+                bold: debitAmount > 0,
+              )),
+              wrapCell(_LedgerCell(
+                _money(entry.balance),
+                align: TextAlign.right,
+                color: Colors.indigo,
                 bold: true,
-              ),
-              const _LedgerCell('-',
-                  align: TextAlign.right, color: Colors.indigo, bold: true),
+              )),
             ],
+          );
+        }),
+        TableRow(
+          decoration: BoxDecoration(
+            color: Colors.blueGrey.withOpacity(.08),
           ),
-        ],
-      ),
-    );
-  }
+          children: [
+            const _LedgerCell('DAY TOTAL', bold: true),
+            const _LedgerCell('-'),
+            const _LedgerCell('-'),
+            const _LedgerCell('-'),
+            const _LedgerCell('-'),
+            const _LedgerCell('-'),
+            _LedgerCell(
+              dayOutstandingTotal <= 0 ? '-' : _money(dayOutstandingTotal),
+              align: TextAlign.right,
+              color: Colors.deepOrange,
+              bold: true,
+            ),
+            _LedgerCell(
+              _money(dayCreditTotal),
+              align: TextAlign.right,
+              color: Colors.green,
+              bold: true,
+            ),
+            _LedgerCell(
+              _money(dayDebitTotal),
+              align: TextAlign.right,
+              color: Colors.red,
+              bold: true,
+            ),
+            const _LedgerCell('-', align: TextAlign.right, color: Colors.indigo, bold: true),
+          ],
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _expenseTab() {
+
+
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Center(
@@ -5562,14 +4761,10 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
               const SizedBox(height: 16),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor:
-                      Theme.of(context).colorScheme.primaryContainer,
-                  foregroundColor:
-                      Theme.of(context).colorScheme.onPrimaryContainer,
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
+                  backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                  foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
+                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
                 onPressed: () {
                   Navigator.push(
@@ -5599,15 +4794,11 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text('Quick expense entry',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                                color: Color(0xFF1E293B))),
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1E293B))),
                         const SizedBox(height: 8),
                         Text(
                             'Add salary, petrol, diesel, commission, rent and keep remarks like who was paid and why.',
-                            style: TextStyle(
-                                fontSize: 12, color: Colors.grey.shade600)),
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                         const SizedBox(height: 12),
                         if (ctrl.expenseCategories.isNotEmpty)
                           Wrap(
@@ -5615,8 +4806,8 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                             runSpacing: 8,
                             children: ctrl.expenseCategories
                                 .map((cat) => OutlinedButton.icon(
-                                    onPressed: () => _showExpenseDialog(
-                                        initialCategory: cat.categoryName),
+                                    onPressed: () =>
+                                        _showExpenseDialog(initialCategory: cat.categoryName),
                                     icon: const Icon(Icons.add, size: 14),
                                     label: Text(cat.categoryName)))
                                 .toList(),
@@ -5644,39 +4835,29 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                     ),
                     color: Colors.white,
                     child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       title: Text('${expense.category} (${expense.vendorName})',
                           style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Text(
-                          'Voucher No: ${expense.voucherNo}  •  ${_fmtDate(expense.expenseDate)}  -  ${expense.note}\n'
-                          'Method: ${expense.paymentMethod} | Status: ${expense.status}\n'
-                          'Base: ${_money(expense.baseAmount)} | Tax: ${_money(expense.totalTaxAmount)} | Ded: ${_money(expense.totalDeductionAmount)}'),
-                      trailing: Wrap(
-                          spacing: 8,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            Text(_money(expense.amount),
-                                style: const TextStyle(
-                                    color: Colors.red,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 15)),
-                            IconButton(
-                                tooltip: 'Print Receipt',
-                                onPressed: () =>
-                                    ExpenseEntryDialog.printExpenseReceipt(
-                                        expense),
-                                icon: const Icon(Icons.print_outlined,
-                                    color: Colors.teal)),
-                            IconButton(
-                                onPressed: () =>
-                                    _showExpenseDialog(expense: expense),
-                                icon: const Icon(Icons.edit_outlined)),
-                            IconButton(
-                                onPressed: () => _confirmDelete(expense.id),
-                                icon: const Icon(Icons.delete_outline,
-                                    color: Colors.redAccent)),
-                          ]),
+                        'Voucher No: ${expense.voucherNo}  •  ${_fmtDate(expense.expenseDate)}  -  ${expense.note}\n'
+                        'Method: ${expense.paymentMethod} | Status: ${expense.status}\n'
+                        'Base: ${_money(expense.baseAmount)} | Tax: ${_money(expense.totalTaxAmount)} | Ded: ${_money(expense.totalDeductionAmount)}'
+                      ),
+                      trailing: Wrap(spacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                        Text(_money(expense.amount),
+                            style: const TextStyle(
+                                color: Colors.red, fontWeight: FontWeight.bold, fontSize: 15)),
+                        IconButton(
+                            tooltip: 'Print Receipt',
+                            onPressed: () => ExpenseEntryDialog.printExpenseReceipt(expense),
+                            icon: const Icon(Icons.print_outlined, color: Colors.teal)),
+                        IconButton(
+                            onPressed: () => _showExpenseDialog(expense: expense),
+                            icon: const Icon(Icons.edit_outlined)),
+                        IconButton(
+                            onPressed: () => _confirmDelete(expense.id),
+                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent)),
+                      ]),
                     ),
                   )),
               if (ctrl.expenses.isEmpty)
@@ -5747,16 +4928,12 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                     children: [
                       Text(
                         'Other income',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: Color(0xFF1E293B)),
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1E293B)),
                       ),
                       SizedBox(height: 8),
                       Text(
                         'Use this for income like box sale, loading charges, rent recovery, or any extra cash received. It will be adjusted in the ledger automatically.',
-                        style:
-                            TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                        style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                       ),
                     ],
                   ),
@@ -5773,8 +4950,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   ),
                   color: Colors.white,
                   child: ListTile(
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     title: Text(
                       income.source,
                       style: const TextStyle(fontWeight: FontWeight.bold),
@@ -5798,17 +4974,13 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                           onPressed: () => _showUniversalVoucherReceiptModal(
                             voucherNo: income.voucherNo,
                             voucherType: 'RECEIPT / INCOME',
-                            dateStr: DateFormat('dd-MMM-yyyy')
-                                .format(income.incomeDate),
-                            partyName: income.partyName.isNotEmpty
-                                ? income.partyName
-                                : income.source,
+                            dateStr: DateFormat('dd-MMM-yyyy').format(income.incomeDate),
+                            partyName: income.partyName.isNotEmpty ? income.partyName : income.source,
                             paymentMode: income.paymentMethod,
                             amount: income.amount,
                             note: income.note,
                           ),
-                          icon: const Icon(Icons.print_outlined,
-                              color: Colors.green),
+                          icon: const Icon(Icons.print_outlined, color: Colors.green),
                         ),
                         IconButton(
                           onPressed: () => _showIncomeDialog(income: income),
@@ -5887,16 +5059,12 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                     children: [
                       Text(
                         'Cash withdrawal',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: Color(0xFF1E293B)),
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1E293B)),
                       ),
                       SizedBox(height: 8),
                       Text(
                         'Use this tab for owner withdrawal, bank deposit, petty cash movement, or other cash taken out. It will be posted to ledger debit automatically.',
-                        style:
-                            TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                        style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                       ),
                     ],
                   ),
@@ -5913,8 +5081,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   ),
                   color: Colors.white,
                   child: ListTile(
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     title: Text(
                       withdrawal.purpose,
                       style: const TextStyle(fontWeight: FontWeight.bold),
@@ -5938,15 +5105,13 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                           onPressed: () => _showUniversalVoucherReceiptModal(
                             voucherNo: withdrawal.voucherNo,
                             voucherType: 'CONTRA / WITHDRAWAL',
-                            dateStr: DateFormat('dd-MMM-yyyy')
-                                .format(withdrawal.withdrawalDate),
+                            dateStr: DateFormat('dd-MMM-yyyy').format(withdrawal.withdrawalDate),
                             partyName: withdrawal.purpose,
                             paymentMode: withdrawal.paymentMethod,
                             amount: withdrawal.amount,
                             note: withdrawal.note,
                           ),
-                          icon: const Icon(Icons.print_outlined,
-                              color: Colors.indigo),
+                          icon: const Icon(Icons.print_outlined, color: Colors.indigo),
                         ),
                         IconButton(
                           onPressed: () =>
@@ -6031,16 +5196,14 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(color: Colors.grey.shade200),
                       ),
-                      child: const Row(
+                      child: Row(
                         children: [
-                          Icon(Icons.info_outline,
-                              color: Colors.blue, size: 20),
-                          SizedBox(width: 10),
+                          const Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                          const SizedBox(width: 10),
                           Expanded(
-                            child: Text(
+                            child: const Text(
                               'Opening deposit is carried forward automatically at local day-end. If you do not save a new deposit for the next day, the previous closing balance will be used.',
-                              style: TextStyle(
-                                  fontSize: 12, color: Color(0xFF64748B)),
+                              style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                             ),
                           ),
                         ],
@@ -6057,8 +5220,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                             initialDate: openingDate,
                             firstDate: DateTime(2020),
                             lastDate: DateTime(2100));
-                        if (picked != null)
-                          setState(() => openingDate = picked);
+                        if (picked != null) setState(() => openingDate = picked);
                       },
                     ),
                     Row(
@@ -6067,13 +5229,10 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                           flex: 3,
                           child: TextField(
                             controller: openingAmountCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true),
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
                             decoration: InputDecoration(
-                              labelText:
-                                  'Opening Deposit (${CurrencyService.symbol})',
-                              prefixIcon: const Icon(
-                                  Icons.account_balance_wallet_outlined),
+                              labelText: 'Opening Deposit (${CurrencyService.symbol})',
+                              prefixIcon: const Icon(Icons.account_balance_wallet_outlined),
                             ),
                           ),
                         ),
@@ -6081,26 +5240,17 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                         Expanded(
                           flex: 2,
                           child: DropdownButtonFormField<String>(
-                            initialValue: openingPaymentMode,
-                            decoration: const InputDecoration(
-                                labelText: 'Payment Mode'),
+                            value: openingPaymentMode,
+                            decoration: const InputDecoration(labelText: 'Payment Mode'),
                             items: const [
-                              DropdownMenuItem(
-                                  value: 'CASH', child: Text('CASH')),
-                              DropdownMenuItem(
-                                  value: 'BANK TRANSFER',
-                                  child: Text('BANK TRANSFER')),
-                              DropdownMenuItem(
-                                  value: 'ONLINE / UPI',
-                                  child: Text('ONLINE / UPI')),
-                              DropdownMenuItem(
-                                  value: 'CARD', child: Text('CARD')),
-                              DropdownMenuItem(
-                                  value: 'CHEQUE', child: Text('CHEQUE')),
+                              DropdownMenuItem(value: 'CASH', child: Text('CASH')),
+                              DropdownMenuItem(value: 'BANK TRANSFER', child: Text('BANK TRANSFER')),
+                              DropdownMenuItem(value: 'ONLINE / UPI', child: Text('ONLINE / UPI')),
+                              DropdownMenuItem(value: 'CARD', child: Text('CARD')),
+                              DropdownMenuItem(value: 'CHEQUE', child: Text('CHEQUE')),
                             ],
                             onChanged: (val) {
-                              if (val != null)
-                                setState(() => openingPaymentMode = val);
+                              if (val != null) setState(() => openingPaymentMode = val);
                             },
                           ),
                         ),
@@ -6137,26 +5287,19 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   ),
                   color: Colors.white,
                   child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 4),
-                      title: Text(
-                          '${_fmtDate(item.balanceDate)}  •  Voucher No: ${item.voucherNo}',
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      title: Text('${_fmtDate(item.balanceDate)}  •  Voucher No: ${item.voucherNo}',
                           style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text(
-                          'Mode: ${item.paymentMode}${item.note.isNotEmpty ? " • ${item.note}" : ""}'),
+                      subtitle: Text('Mode: ${item.paymentMode}${item.note.isNotEmpty ? " • ${item.note}" : ""}'),
                       trailing: Wrap(
                         spacing: 8,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Text(_money(item.openingBalance),
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 15,
-                                  color: Colors.blue)),
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.blue)),
                           IconButton(
                             tooltip: 'Print Voucher Slip',
-                            icon: const Icon(Icons.print_outlined,
-                                color: Colors.teal),
+                            icon: const Icon(Icons.print_outlined, color: Colors.teal),
                             onPressed: () {
                               _showUniversalVoucherReceiptModal(
                                 voucherNo: item.voucherNo,
@@ -6185,9 +5328,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
         final isWide = constraints.maxWidth >= 980;
         final leftWidth = isWide ? 320.0 : constraints.maxWidth;
         final rightWidth = isWide ? 220.0 : constraints.maxWidth;
-        final cols = constraints.maxWidth > 550
-            ? 3
-            : (constraints.maxWidth > 350 ? 2 : 1);
+        final cols = constraints.maxWidth > 550 ? 3 : (constraints.maxWidth > 350 ? 2 : 1);
         return SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(children: [
@@ -6236,47 +5377,45 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                   side: BorderSide(color: Colors.grey.shade200),
                 ),
                 color: Colors.white,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Wrap(
-                    alignment: WrapAlignment.spaceBetween,
-                    runSpacing: 12,
-                    children: [
-                      SizedBox(
-                        width: leftWidth,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${item.billNo} - ${item.customerName}',
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                                '${_fmtDate(item.date)} - ${item.customerPhone}'),
-                          ],
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                runSpacing: 12,
+                children: [
+                  SizedBox(
+                    width: leftWidth,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${item.billNo} - ${item.customerName}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
-                      ),
-                      SizedBox(
-                        width: rightWidth,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Amount: ${_money(item.amount)}'),
-                            Text('Paid: ${_money(item.paidAmount)}'),
-                            Text('Outstanding: ${_money(item.outstanding)}'),
-                          ],
-                        ),
-                      ),
-                      _statusChip(item.paymentStatus),
-                    ],
+                        const SizedBox(height: 6),
+                        Text('${_fmtDate(item.date)} - ${item.customerPhone}'),
+                      ],
+                    ),
                   ),
-                ),
+                  SizedBox(
+                    width: rightWidth,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Amount: ${_money(item.amount)}'),
+                        Text('Paid: ${_money(item.paidAmount)}'),
+                        Text('Outstanding: ${_money(item.outstanding)}'),
+                      ],
+                    ),
+                  ),
+                  _statusChip(item.paymentStatus),
+                ],
               ),
             ),
-            if (ctrl.deliveries.isEmpty) _emptyCard('No sales found.'),
-          ]),
+          ),
+        ),
+        if (ctrl.deliveries.isEmpty) _emptyCard('No sales found.'),
+      ]),
         );
       },
     );
@@ -6285,9 +5424,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
   Widget _expiryTab() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final cols = constraints.maxWidth > 550
-            ? 3
-            : (constraints.maxWidth > 350 ? 2 : 1);
+        final cols = constraints.maxWidth > 550 ? 3 : (constraints.maxWidth > 350 ? 2 : 1);
         return SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(children: [
@@ -6329,27 +5466,27 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
             ),
             const SizedBox(height: 16),
             ...ctrl.expiryItems.map((item) => Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  side: BorderSide(color: Colors.grey.shade200),
-                ),
-                color: Colors.white,
-                child: ListTile(
-                  title: Text('${item.itemName} (${item.itemCode})',
-                      style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text(
-                      'Qty ${item.qty.toStringAsFixed(2)} ${item.unit}  -  Expiry ${_fmtDate(item.expiryDate)}'),
-                  trailing: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        _statusChip(item.status),
-                        Text('${item.daysLeft} days')
-                      ]),
-                ))),
-            if (ctrl.expiryItems.isEmpty) _emptyCard('No expiry items found.'),
-          ]),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: BorderSide(color: Colors.grey.shade200),
+                  ),
+                  color: Colors.white,
+                  child: ListTile(
+                    title: Text('${item.itemName} (${item.itemCode})',
+                        style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text(
+                        'Qty ${item.qty.toStringAsFixed(2)} ${item.unit}  -  Expiry ${_fmtDate(item.expiryDate)}'),
+                    trailing: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          _statusChip(item.status),
+                          Text('${item.daysLeft} days')
+                        ]),
+                  ))),
+        if (ctrl.expiryItems.isEmpty) _emptyCard('No expiry items found.'),
+      ]),
         );
       },
     );
@@ -6444,8 +5581,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
     }
   }
 
-  String _ledgerNote(CashLedgerEntry entry,
-      [List<CashLedgerEntry>? allEntries]) {
+  String _ledgerNote(CashLedgerEntry entry, [List<CashLedgerEntry>? allEntries]) {
     String rawNote = entry.notes.trim();
 
     if (entry.transactionType.toUpperCase() == 'INCOME' &&
@@ -6493,8 +5629,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
     return list;
   }
 
-  double _ledgerOutstanding(CashLedgerEntry entry,
-      [List<CashLedgerEntry>? allEntries]) {
+  double _ledgerOutstanding(CashLedgerEntry entry, [List<CashLedgerEntry>? allEntries]) {
     final type = entry.transactionType.trim().toUpperCase();
     final method = entry.paymentMethod.trim().toUpperCase();
     final isCreditType = type == 'SALE_CREDIT' ||
@@ -6534,9 +5669,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
         : _allLedgerEntries;
 
     if (pool.isNotEmpty) {
-      final rawRef = entry.referenceNo.isNotEmpty
-          ? entry.referenceNo
-          : (entry.referenceId ?? '');
+      final rawRef = entry.referenceNo.isNotEmpty ? entry.referenceNo : (entry.referenceId ?? '');
       final ref = rawRef
           .replaceAll('SV-', '')
           .replaceAll('RV-', '')
@@ -6555,9 +5688,7 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
 
           if (!isPaymentType) continue;
 
-          final itemRef = (item.referenceNo.isNotEmpty
-                  ? item.referenceNo
-                  : (item.referenceId ?? ''))
+          final itemRef = (item.referenceNo.isNotEmpty ? item.referenceNo : (item.referenceId ?? ''))
               .replaceAll('SV-', '')
               .replaceAll('RV-', '')
               .replaceAll('PV-', '')
@@ -6732,20 +5863,18 @@ class ExpenseEntryDialog extends StatefulWidget {
     await propertyCtrl.load();
     final property = propertyCtrl.data;
     final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);
-
+    
     // Parse manual vendor details
     String displayVendor = expense.vendorName;
     String displayNote = expense.note;
-    if (expense.vendorName == 'Direct Cash' &&
-        expense.note.startsWith('Paid To: ')) {
+    if (expense.vendorName == 'Direct Cash' && expense.note.startsWith('Paid To: ')) {
       final parts = expense.note.split(' | ');
       displayVendor = parts.first.substring(9);
       displayNote = parts.length > 1 ? parts.sublist(1).join(' | ') : '';
     }
-
+    
     await Printing.layoutPdf(
-      name:
-          'Expense_Receipt_${expense.id.length >= 8 ? expense.id.substring(0, 8) : expense.id}',
+      name: 'Expense_Receipt_${expense.id.length >= 8 ? expense.id.substring(0, 8) : expense.id}',
       onLayout: (format) async {
         final fonts = await PosInvoicePrinter.getInvoiceFonts();
         final pdf = pw.Document(
@@ -6756,7 +5885,7 @@ class ExpenseEntryDialog extends StatefulWidget {
         );
         final bold = fonts.bold;
         final regular = fonts.regular;
-
+        
         pw.Widget divider() => pw.Container(
               margin: const pw.EdgeInsets.symmetric(vertical: 5),
               width: double.infinity,
@@ -6807,48 +5936,35 @@ class ExpenseEntryDialog extends StatefulWidget {
               ),
               divider(),
               kvLine('Voucher No:', expense.voucherNo, boldFont: true),
-              kvLine('Date:',
-                  DateFormat('dd-MMM-yyyy').format(expense.expenseDate)),
+              kvLine('Date:', DateFormat('dd-MMM-yyyy').format(expense.expenseDate)),
               kvLine('Category:', expense.category),
               kvLine('Vendor:', displayVendor.isNotEmpty ? displayVendor : '-'),
               kvLine('Method:', expense.paymentMethod),
               kvLine('Status:', expense.status),
               if (displayNote.isNotEmpty) ...[
                 divider(),
-                pw.Text('Notes: $displayNote',
-                    style: const pw.TextStyle(fontSize: 8.5)),
+                pw.Text('Notes: $displayNote', style: const pw.TextStyle(fontSize: 8.5)),
               ],
               divider(),
-              kvLine(
-                  'Base Amount:', CurrencyService.format(expense.baseAmount)),
+              kvLine('Base Amount:', CurrencyService.format(expense.baseAmount)),
               if (expense.taxes.isNotEmpty) ...[
                 pw.SizedBox(height: 4),
-                pw.Text('TAX DETAILS:',
-                    style: pw.TextStyle(
-                        fontSize: 8.5, fontWeight: pw.FontWeight.bold)),
-                ...expense.taxes.map((t) => kvLine(
-                    '  ${t.taxName} (${t.taxPercentage}%):',
-                    CurrencyService.format(t.taxAmount))),
+                pw.Text('TAX DETAILS:', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold)),
+                ...expense.taxes.map((t) => kvLine('  ${t.taxName} (${t.taxPercentage}%):', CurrencyService.format(t.taxAmount))),
               ],
               if (expense.deductions.isNotEmpty) ...[
                 pw.SizedBox(height: 4),
-                pw.Text('DEDUCTION DETAILS:',
-                    style: pw.TextStyle(
-                        fontSize: 8.5, fontWeight: pw.FontWeight.bold)),
-                ...expense.deductions.map((d) => kvLine(
-                    '  ${d.deductionType} (${d.deductionPercentage}%):',
-                    '-${CurrencyService.format(d.deductionAmount)}')),
+                pw.Text('DEDUCTION DETAILS:', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold)),
+                ...expense.deductions.map((d) => kvLine('  ${d.deductionType} (${d.deductionPercentage}%):', '-${CurrencyService.format(d.deductionAmount)}')),
               ],
               divider(),
-              kvLine('Net Payable:', CurrencyService.format(expense.amount),
-                  boldFont: true),
+              kvLine('Net Payable:', CurrencyService.format(expense.amount), boldFont: true),
               divider(),
               pw.SizedBox(height: 10),
               pw.Center(
                 child: pw.Text(
                   'Signature / Authorized Sign',
-                  style: pw.TextStyle(
-                      fontSize: 8.5, fontWeight: pw.FontWeight.bold),
+                  style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold),
                 ),
               ),
               pw.SizedBox(height: 5),
@@ -6882,8 +5998,7 @@ class TaxRowState {
     required this.taxPercentage,
     this.isCustom = false,
   })  : nameCtrl = TextEditingController(text: taxName),
-        percentCtrl =
-            TextEditingController(text: taxPercentage.toStringAsFixed(2));
+        percentCtrl = TextEditingController(text: taxPercentage.toStringAsFixed(2));
 }
 
 class DeductionRowState {
@@ -6894,8 +6009,7 @@ class DeductionRowState {
   DeductionRowState({
     required this.deductionType,
     required this.deductionPercentage,
-  }) : percentCtrl =
-            TextEditingController(text: deductionPercentage.toStringAsFixed(2));
+  })  : percentCtrl = TextEditingController(text: deductionPercentage.toStringAsFixed(2));
 }
 
 class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
@@ -6903,7 +6017,7 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
   final invoiceRefNoCtrl = TextEditingController();
   final noteCtrl = TextEditingController();
   final manualVendorCtrl = TextEditingController();
-
+ 
   DateTime paymentDate = DateTime.now();
   String? selectedCategoryId;
   int? selectedVendorId;
@@ -6914,24 +6028,24 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
   List<String> paymentMethodsList = ['CASH', 'BANK', 'UPI', 'CARD', 'CREDIT'];
   String status = 'Paid';
   bool isTaxInclusive = false;
-
+ 
   List<Supplier> suppliers = [];
   List<TaxRowState> taxRows = [];
   List<DeductionRowState> deductionRows = [];
   bool loadingData = true;
-
+ 
   double baseAmount = 0.0;
   double totalTaxAmount = 0.0;
   double totalDeductionAmount = 0.0;
   double netPayableAmount = 0.0;
-
+ 
   @override
   void initState() {
     super.initState();
     _initData();
     amountCtrl.addListener(_recalculate);
   }
-
+ 
   @override
   void dispose() {
     amountCtrl.dispose();
@@ -6954,8 +6068,7 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
       await widget.ctrl.loadTaxesMaster();
       await widget.ctrl.loadCustomPaymentMethods();
       if (widget.ctrl.customPaymentMethods.isNotEmpty) {
-        paymentMethodsList =
-            List<String>.from(widget.ctrl.customPaymentMethods);
+        paymentMethodsList = List<String>.from(widget.ctrl.customPaymentMethods);
       }
       final supplierRes = await ApiClient.get('/api/inventory/suppliers');
       suppliers = (supplierRes['data'] as List? ?? [])
@@ -6973,7 +6086,7 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
 
       if (widget.expense != null) {
         final exp = widget.expense!;
-        amountCtrl.text = exp.isTaxInclusive
+        amountCtrl.text = exp.isTaxInclusive 
             ? (exp.baseAmount + exp.totalTaxAmount).toStringAsFixed(2)
             : exp.baseAmount.toStringAsFixed(2);
         invoiceRefNoCtrl.text = exp.invoiceRefNo;
@@ -6985,8 +6098,7 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
           vendorType = 'Staff';
           final parts = exp.note.split(' | ');
           final staffName = parts.first.substring(15);
-          final matchIdx = staffList.indexWhere(
-              (u) => u.fullName == staffName || u.username == staffName);
+          final matchIdx = staffList.indexWhere((u) => u.fullName == staffName || u.username == staffName);
           if (matchIdx != -1) {
             selectedStaffUser = staffList[matchIdx];
           } else {
@@ -7013,8 +6125,7 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
         }
 
         taxRows = exp.taxes.map((t) {
-          final isStd = widget.ctrl.taxesMasterList
-              .any((std) => std.taxName == t.taxName);
+          final isStd = widget.ctrl.taxesMasterList.any((std) => std.taxName == t.taxName);
           return TaxRowState(
             taxName: t.taxName,
             taxPercentage: t.taxPercentage,
@@ -7031,18 +6142,15 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
       } else {
         if (widget.ctrl.expenseCategories.isNotEmpty) {
           if (widget.initialCategory.isNotEmpty) {
-            final idx = widget.ctrl.expenseCategories.indexWhere((c) =>
-                c.categoryName.trim().toLowerCase() ==
-                widget.initialCategory.trim().toLowerCase());
-            selectedCategoryId = idx != -1
-                ? widget.ctrl.expenseCategories[idx].id
-                : widget.ctrl.expenseCategories.first.id;
+            final idx = widget.ctrl.expenseCategories.indexWhere(
+              (c) => c.categoryName.trim().toLowerCase() == widget.initialCategory.trim().toLowerCase()
+            );
+            selectedCategoryId = idx != -1 ? widget.ctrl.expenseCategories[idx].id : widget.ctrl.expenseCategories.first.id;
           } else {
             selectedCategoryId = widget.ctrl.expenseCategories.first.id;
           }
         }
-        if (paymentMethodsList.isNotEmpty &&
-            !paymentMethodsList.contains(paymentMethod)) {
+        if (paymentMethodsList.isNotEmpty && !paymentMethodsList.contains(paymentMethod)) {
           paymentMethod = paymentMethodsList.first;
         }
       }
@@ -7067,8 +6175,7 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
 
   void _recalculate() {
     final amount = double.tryParse(amountCtrl.text) ?? 0.0;
-    final totalTaxPercent = taxRows.fold<double>(0.0,
-        (sum, row) => sum + (double.tryParse(row.percentCtrl.text) ?? 0.0));
+    final totalTaxPercent = taxRows.fold<double>(0.0, (sum, row) => sum + (double.tryParse(row.percentCtrl.text) ?? 0.0));
 
     if (isTaxInclusive) {
       baseAmount = amount / (1.0 + (totalTaxPercent / 100.0));
@@ -7088,12 +6195,10 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
       totalDeductionAmount += double.parse(dedAmt.toStringAsFixed(2));
     }
 
-    totalDeductionAmount =
-        double.parse(totalDeductionAmount.toStringAsFixed(2));
+    totalDeductionAmount = double.parse(totalDeductionAmount.toStringAsFixed(2));
 
     final grossAmount = isTaxInclusive ? amount : (baseAmount + totalTaxAmount);
-    netPayableAmount =
-        double.parse((grossAmount - totalDeductionAmount).toStringAsFixed(2));
+    netPayableAmount = double.parse((grossAmount - totalDeductionAmount).toStringAsFixed(2));
 
     if (mounted) {
       setState(() {});
@@ -7115,9 +6220,7 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
           autofocus: true,
         ),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           FilledButton(
             onPressed: () async {
               final name = nameCtrl.text.trim();
@@ -7147,8 +6250,8 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
 
   void _addTaxRow() {
     setState(() {
-      final defaultTax = widget.ctrl.taxesMasterList.isNotEmpty
-          ? widget.ctrl.taxesMasterList.first
+      final defaultTax = widget.ctrl.taxesMasterList.isNotEmpty 
+          ? widget.ctrl.taxesMasterList.first 
           : null;
       final newRow = TaxRowState(
         taxName: defaultTax?.taxName ?? 'CGST',
@@ -7190,37 +6293,28 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
     }
 
     try {
-      final taxesPayload = taxRows
-          .map((r) => {
-                'tax_name': r.isCustom ? r.nameCtrl.text.trim() : r.taxName,
-                'tax_percentage':
-                    double.tryParse(r.percentCtrl.text.trim()) ?? 0.0,
-              })
-          .toList();
+      final taxesPayload = taxRows.map((r) => {
+        'tax_name': r.isCustom ? r.nameCtrl.text.trim() : r.taxName,
+        'tax_percentage': double.tryParse(r.percentCtrl.text.trim()) ?? 0.0,
+      }).toList();
 
-      final deductionsPayload = deductionRows
-          .map((r) => {
-                'deduction_type': r.deductionType,
-                'deduction_percentage':
-                    double.tryParse(r.percentCtrl.text.trim()) ?? 0.0,
-              })
-          .toList();
+      final deductionsPayload = deductionRows.map((r) => {
+        'deduction_type': r.deductionType,
+        'deduction_percentage': double.tryParse(r.percentCtrl.text.trim()) ?? 0.0,
+      }).toList();
 
       String finalNote = noteCtrl.text.trim();
       int? finalVendorId = selectedVendorId;
       if (vendorType == 'Staff') {
         finalVendorId = null;
-        final staffName =
-            selectedStaffUser?.fullName ?? manualVendorCtrl.text.trim();
+        final staffName = selectedStaffUser?.fullName ?? manualVendorCtrl.text.trim();
         if (staffName.isNotEmpty) {
-          finalNote =
-              'Paid To Staff: $staffName${finalNote.isNotEmpty ? ' | $finalNote' : ''}';
+          finalNote = 'Paid To Staff: $staffName${finalNote.isNotEmpty ? ' | $finalNote' : ''}';
         }
       } else if (vendorType == 'Other') {
         finalVendorId = null;
         if (manualVendorCtrl.text.trim().isNotEmpty) {
-          finalNote =
-              'Paid To: ${manualVendorCtrl.text.trim()}${finalNote.isNotEmpty ? ' | $finalNote' : ''}';
+          finalNote = 'Paid To: ${manualVendorCtrl.text.trim()}${finalNote.isNotEmpty ? ' | $finalNote' : ''}';
         }
       } else {
         // Supplier case
@@ -7232,9 +6326,7 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
         categoryId: selectedCategoryId!,
         amount: amount,
         vendorId: finalVendorId,
-        invoiceRefNo: invoiceRefNoCtrl.text.trim().isEmpty
-            ? null
-            : invoiceRefNoCtrl.text.trim(),
+        invoiceRefNo: invoiceRefNoCtrl.text.trim().isEmpty ? null : invoiceRefNoCtrl.text.trim(),
         paymentMethod: paymentMethod,
         isTaxInclusive: isTaxInclusive,
         note: finalNote,
@@ -7261,8 +6353,7 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
     }
 
     final initialVendor = selectedVendorId != null
-        ? suppliers.firstWhere((s) => s.id == selectedVendorId,
-            orElse: () => suppliers.first)
+        ? suppliers.firstWhere((s) => s.id == selectedVendorId, orElse: () => suppliers.first)
         : null;
 
     return Dialog(
@@ -7281,8 +6372,7 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                 children: [
                   Text(
                     widget.expense == null ? 'Add Expense' : 'Edit Expense',
-                    style: const TextStyle(
-                        fontSize: 20, fontWeight: FontWeight.bold),
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close),
@@ -7306,8 +6396,7 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                               elevation: 0,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
-                                side:
-                                    const BorderSide(color: Color(0xFFE2E8F0)),
+                                side: const BorderSide(color: Color(0xFFE2E8F0)),
                               ),
                               color: Colors.white,
                               margin: const EdgeInsets.only(bottom: 12),
@@ -7316,11 +6405,7 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text('Vendor & Billing Info',
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 13,
-                                            color: Color(0xFF1E293B))),
+                                    const Text('Vendor & Billing Info', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B))),
                                     const SizedBox(height: 12),
                                     Row(
                                       children: [
@@ -7364,23 +6449,14 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                     const SizedBox(height: 12),
                                     if (vendorType == 'Supplier')
                                       Autocomplete<Supplier>(
-                                        displayStringForOption:
-                                            (Supplier option) =>
-                                                option.supplierName,
-                                        optionsBuilder: (TextEditingValue
-                                            textEditingValue) {
+                                        displayStringForOption: (Supplier option) => option.supplierName,
+                                        optionsBuilder: (TextEditingValue textEditingValue) {
                                           if (textEditingValue.text.isEmpty) {
                                             return suppliers;
                                           }
-                                          return suppliers
-                                              .where((Supplier option) {
-                                            return option.supplierName
-                                                    .toLowerCase()
-                                                    .contains(textEditingValue
-                                                        .text
-                                                        .toLowerCase()) ||
-                                                option.phone.contains(
-                                                    textEditingValue.text);
+                                          return suppliers.where((Supplier option) {
+                                            return option.supplierName.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                                                option.phone.contains(textEditingValue.text);
                                           });
                                         },
                                         onSelected: (Supplier selection) {
@@ -7388,15 +6464,9 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                             selectedVendorId = selection.id;
                                           });
                                         },
-                                        fieldViewBuilder: (context,
-                                            textEditingController,
-                                            focusNode,
-                                            onFieldSubmitted) {
-                                          if (initialVendor != null &&
-                                              textEditingController
-                                                  .text.isEmpty) {
-                                            textEditingController.text =
-                                                initialVendor.supplierName;
+                                        fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+                                          if (initialVendor != null && textEditingController.text.isEmpty) {
+                                            textEditingController.text = initialVendor.supplierName;
                                           }
                                           return TextField(
                                             controller: textEditingController,
@@ -7404,33 +6474,21 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                             decoration: const InputDecoration(
                                               labelText: 'Vendor / Supplier',
                                               hintText: 'Search vendor...',
-                                              prefixIcon:
-                                                  Icon(Icons.business_outlined),
+                                              prefixIcon: Icon(Icons.business_outlined),
                                             ),
                                           );
                                         },
                                       )
                                     else if (vendorType == 'Staff')
                                       Autocomplete<AppUser>(
-                                        displayStringForOption:
-                                            (AppUser option) => option.fullName,
-                                        optionsBuilder: (TextEditingValue
-                                            textEditingValue) {
+                                        displayStringForOption: (AppUser option) => option.fullName,
+                                        optionsBuilder: (TextEditingValue textEditingValue) {
                                           if (textEditingValue.text.isEmpty) {
                                             return staffList;
                                           }
-                                          return staffList
-                                              .where((AppUser option) {
-                                            return option.fullName
-                                                    .toLowerCase()
-                                                    .contains(textEditingValue
-                                                        .text
-                                                        .toLowerCase()) ||
-                                                option.username
-                                                    .toLowerCase()
-                                                    .contains(textEditingValue
-                                                        .text
-                                                        .toLowerCase());
+                                          return staffList.where((AppUser option) {
+                                            return option.fullName.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                                                option.username.toLowerCase().contains(textEditingValue.text.toLowerCase());
                                           });
                                         },
                                         onSelected: (AppUser selection) {
@@ -7438,15 +6496,9 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                             selectedStaffUser = selection;
                                           });
                                         },
-                                        fieldViewBuilder: (context,
-                                            textEditingController,
-                                            focusNode,
-                                            onFieldSubmitted) {
-                                          if (selectedStaffUser != null &&
-                                              textEditingController
-                                                  .text.isEmpty) {
-                                            textEditingController.text =
-                                                selectedStaffUser!.fullName;
+                                        fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+                                          if (selectedStaffUser != null && textEditingController.text.isEmpty) {
+                                            textEditingController.text = selectedStaffUser!.fullName;
                                           }
                                           return TextField(
                                             controller: textEditingController,
@@ -7454,8 +6506,7 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                             decoration: const InputDecoration(
                                               labelText: 'Select Staff Member',
                                               hintText: 'Search staff user...',
-                                              prefixIcon:
-                                                  Icon(Icons.badge_outlined),
+                                              prefixIcon: Icon(Icons.badge_outlined),
                                             ),
                                           );
                                         },
@@ -7465,10 +6516,8 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                         controller: manualVendorCtrl,
                                         decoration: const InputDecoration(
                                           labelText: 'Custom Paid To Name',
-                                          hintText:
-                                              'Type custom name manually (e.g. host name, direct utility)...',
-                                          prefixIcon:
-                                              Icon(Icons.person_outline),
+                                          hintText: 'Type custom name manually (e.g. host name, direct utility)...',
+                                          prefixIcon: Icon(Icons.person_outline),
                                         ),
                                       ),
                                     const SizedBox(height: 12),
@@ -7476,8 +6525,7 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                       controller: invoiceRefNoCtrl,
                                       decoration: const InputDecoration(
                                         labelText: 'Invoice / Ref No',
-                                        prefixIcon:
-                                            Icon(Icons.description_outlined),
+                                        prefixIcon: Icon(Icons.description_outlined),
                                       ),
                                     ),
                                   ],
@@ -7490,8 +6538,7 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                               elevation: 0,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
-                                side:
-                                    const BorderSide(color: Color(0xFFE2E8F0)),
+                                side: const BorderSide(color: Color(0xFFE2E8F0)),
                               ),
                               color: Colors.white,
                               margin: const EdgeInsets.only(bottom: 12),
@@ -7500,35 +6547,26 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text('Expense Category & Amount',
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 13,
-                                            color: Color(0xFF1E293B))),
+                                    const Text('Expense Category & Amount', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B))),
                                     const SizedBox(height: 12),
                                     Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
+                                      crossAxisAlignment: CrossAxisAlignment.end,
                                       children: [
                                         Expanded(
-                                          child:
-                                              DropdownButtonFormField<String>(
-                                            initialValue: selectedCategoryId,
+                                          child: DropdownButtonFormField<String>(
+                                            value: selectedCategoryId,
                                             decoration: const InputDecoration(
                                               labelText: 'Expense Category',
-                                              prefixIcon:
-                                                  Icon(Icons.category_outlined),
+                                              prefixIcon: Icon(Icons.category_outlined),
                                             ),
-                                            items: widget.ctrl.expenseCategories
-                                                .map((cat) {
+                                            items: widget.ctrl.expenseCategories.map((cat) {
                                               return DropdownMenuItem(
                                                 value: cat.id,
                                                 child: Text(cat.categoryName),
                                               );
                                             }).toList(),
                                             onChanged: (val) {
-                                              setState(() =>
-                                                  selectedCategoryId = val);
+                                              setState(() => selectedCategoryId = val);
                                             },
                                           ),
                                         ),
@@ -7540,40 +6578,21 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                         ),
                                       ],
                                     ),
-                                    if (widget
-                                        .ctrl.expenseCategories.isNotEmpty) ...[
+                                    if (widget.ctrl.expenseCategories.isNotEmpty) ...[
                                       const SizedBox(height: 12),
-                                      const Text('Quick Select Category:',
-                                          style: TextStyle(
-                                              fontSize: 11,
-                                              color: Colors.grey,
-                                              fontWeight: FontWeight.bold)),
+                                      const Text('Quick Select Category:', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold)),
                                       const SizedBox(height: 6),
                                       Wrap(
                                         spacing: 8,
                                         runSpacing: 8,
-                                        children: widget.ctrl.expenseCategories
-                                            .take(8)
-                                            .map((cat) {
-                                          final isSelected =
-                                              selectedCategoryId == cat.id;
+                                        children: widget.ctrl.expenseCategories.take(8).map((cat) {
+                                          final isSelected = selectedCategoryId == cat.id;
                                           return ChoiceChip(
-                                            label: Text(cat.categoryName,
-                                                style: TextStyle(
-                                                    color: isSelected
-                                                        ? Colors.white
-                                                        : Colors.black87,
-                                                    fontSize: 11)),
+                                            label: Text(cat.categoryName, style: TextStyle(color: isSelected ? Colors.white : Colors.black87, fontSize: 11)),
                                             selected: isSelected,
-                                            selectedColor: Theme.of(context)
-                                                .colorScheme
-                                                .primary,
-                                            backgroundColor:
-                                                const Color(0xFFF1F5F9),
-                                            labelStyle: TextStyle(
-                                                color: isSelected
-                                                    ? Colors.white
-                                                    : Colors.black87),
+                                            selectedColor: Theme.of(context).colorScheme.primary,
+                                            backgroundColor: const Color(0xFFF1F5F9),
+                                            labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.black87),
                                             onSelected: (selected) {
                                               if (selected) {
                                                 setState(() {
@@ -7593,15 +6612,11 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                           flex: 3,
                                           child: TextField(
                                             controller: amountCtrl,
-                                            keyboardType: const TextInputType
-                                                .numberWithOptions(
-                                                decimal: true),
+                                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                             decoration: InputDecoration(
-                                              labelText:
-                                                  'Amount (${CurrencyService.symbol})',
+                                              labelText: 'Amount (${CurrencyService.symbol})',
                                               hintText: 'Enter amount',
-                                              prefixIcon: const Icon(
-                                                  Icons.payments_outlined),
+                                              prefixIcon: const Icon(Icons.payments_outlined),
                                             ),
                                           ),
                                         ),
@@ -7609,9 +6624,7 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                         Expanded(
                                           flex: 3,
                                           child: CheckboxListTile(
-                                            title: const Text(
-                                                'Inclusive of Tax',
-                                                style: TextStyle(fontSize: 12)),
+                                            title: const Text('Inclusive of Tax', style: TextStyle(fontSize: 12)),
                                             value: isTaxInclusive,
                                             contentPadding: EdgeInsets.zero,
                                             dense: true,
@@ -7635,8 +6648,7 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                               elevation: 0,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
-                                side:
-                                    const BorderSide(color: Color(0xFFE2E8F0)),
+                                side: const BorderSide(color: Color(0xFFE2E8F0)),
                               ),
                               color: Colors.white,
                               margin: const EdgeInsets.only(bottom: 12),
@@ -7646,92 +6658,52 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
-                                        const Text('Tax Multi-layers',
-                                            style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 13,
-                                                color: Color(0xFF1E293B))),
+                                        const Text('Tax Multi-layers', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B))),
                                         TextButton.icon(
                                           onPressed: _addTaxRow,
-                                          icon: const Icon(
-                                              Icons.add_circle_outline,
-                                              size: 16),
-                                          label: const Text('Add Tax',
-                                              style: TextStyle(fontSize: 12)),
+                                          icon: const Icon(Icons.add_circle_outline, size: 16),
+                                          label: const Text('Add Tax', style: TextStyle(fontSize: 12)),
                                         ),
                                       ],
                                     ),
                                     ...taxRows.map((row) {
                                       final index = taxRows.indexOf(row);
                                       return Card(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .surfaceContainerHighest
-                                            .withOpacity(0.4),
-                                        margin: const EdgeInsets.symmetric(
-                                            vertical: 4),
+                                        color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.4),
+                                        margin: const EdgeInsets.symmetric(vertical: 4),
                                         child: Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 8, vertical: 4),
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                           child: Row(
                                             children: [
                                               Expanded(
                                                 flex: 3,
                                                 child: row.isCustom
                                                     ? TextField(
-                                                        controller:
-                                                            row.nameCtrl,
-                                                        decoration:
-                                                            const InputDecoration(
+                                                        controller: row.nameCtrl,
+                                                        decoration: const InputDecoration(
                                                           labelText: 'Tax Name',
                                                           isDense: true,
                                                         ),
                                                       )
-                                                    : DropdownButtonFormField<
-                                                        String>(
-                                                        initialValue:
-                                                            row.taxName,
-                                                        decoration:
-                                                            const InputDecoration(
-                                                                isDense: true),
+                                                    : DropdownButtonFormField<String>(
+                                                        value: row.taxName,
+                                                        decoration: const InputDecoration(isDense: true),
                                                         items: [
-                                                          ...widget.ctrl
-                                                              .taxesMasterList
-                                                              .map((t) => DropdownMenuItem(
-                                                                  value:
-                                                                      t.taxName,
-                                                                  child: Text(t
-                                                                      .taxName))),
-                                                          const DropdownMenuItem(
-                                                              value: 'CUSTOM',
-                                                              child: Text(
-                                                                  'Custom...')),
+                                                          ...widget.ctrl.taxesMasterList.map((t) => DropdownMenuItem(value: t.taxName, child: Text(t.taxName))),
+                                                          const DropdownMenuItem(value: 'CUSTOM', child: Text('Custom...')),
                                                         ],
                                                         onChanged: (val) {
                                                           if (val == 'CUSTOM') {
                                                             setState(() {
-                                                              row.isCustom =
-                                                                  true;
+                                                              row.isCustom = true;
                                                             });
-                                                          } else if (val !=
-                                                              null) {
-                                                            final taxObj = widget
-                                                                .ctrl
-                                                                .taxesMasterList
-                                                                .firstWhere((t) =>
-                                                                    t.taxName ==
-                                                                    val);
+                                                          } else if (val != null) {
+                                                            final taxObj = widget.ctrl.taxesMasterList.firstWhere((t) => t.taxName == val);
                                                             setState(() {
                                                               row.taxName = val;
-                                                              row.percentCtrl
-                                                                      .text =
-                                                                  taxObj
-                                                                      .defaultRate
-                                                                      .toStringAsFixed(
-                                                                          2);
+                                                              row.percentCtrl.text = taxObj.defaultRate.toStringAsFixed(2);
                                                             });
                                                             _recalculate();
                                                           }
@@ -7743,10 +6715,8 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                                 flex: 2,
                                                 child: TextField(
                                                   controller: row.percentCtrl,
-                                                  keyboardType:
-                                                      TextInputType.number,
-                                                  decoration:
-                                                      const InputDecoration(
+                                                  keyboardType: TextInputType.number,
+                                                  decoration: const InputDecoration(
                                                     labelText: 'Rate %',
                                                     isDense: true,
                                                   ),
@@ -7754,24 +6724,11 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                               ),
                                               const SizedBox(width: 8),
                                               Text(
-                                                CurrencyService.format(
-                                                    (isTaxInclusive
-                                                            ? baseAmount
-                                                            : baseAmount) *
-                                                        (double.tryParse(row
-                                                                .percentCtrl
-                                                                .text) ??
-                                                            0) /
-                                                        100),
-                                                style: const TextStyle(
-                                                    fontWeight: FontWeight.w600,
-                                                    fontSize: 13),
+                                                CurrencyService.format((isTaxInclusive ? baseAmount : baseAmount) * (double.tryParse(row.percentCtrl.text) ?? 0) / 100),
+                                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                                               ),
                                               IconButton(
-                                                icon: const Icon(
-                                                    Icons.delete_outline,
-                                                    size: 18,
-                                                    color: Colors.red),
+                                                icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
                                                 onPressed: () {
                                                   setState(() {
                                                     taxRows.removeAt(index);
@@ -7786,60 +6743,35 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                     }),
                                     const Divider(height: 24),
                                     Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
-                                        const Text('Deductions (TDS, TCS)',
-                                            style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 13,
-                                                color: Color(0xFF1E293B))),
+                                        const Text('Deductions (TDS, TCS)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B))),
                                         TextButton.icon(
                                           onPressed: _addDeductionRow,
-                                          icon: const Icon(
-                                              Icons.add_circle_outline,
-                                              size: 16),
-                                          label: const Text('Add Deduction',
-                                              style: TextStyle(fontSize: 12)),
+                                          icon: const Icon(Icons.add_circle_outline, size: 16),
+                                          label: const Text('Add Deduction', style: TextStyle(fontSize: 12)),
                                         ),
                                       ],
                                     ),
                                     ...deductionRows.map((row) {
                                       final index = deductionRows.indexOf(row);
                                       return Card(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .surfaceContainerHighest
-                                            .withOpacity(0.4),
-                                        margin: const EdgeInsets.symmetric(
-                                            vertical: 4),
+                                        color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.4),
+                                        margin: const EdgeInsets.symmetric(vertical: 4),
                                         child: Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 8, vertical: 4),
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                           child: Row(
                                             children: [
                                               Expanded(
                                                 flex: 3,
-                                                child: DropdownButtonFormField<
-                                                    String>(
-                                                  initialValue:
-                                                      row.deductionType,
-                                                  decoration:
-                                                      const InputDecoration(
-                                                          isDense: true),
+                                                child: DropdownButtonFormField<String>(
+                                                  value: row.deductionType,
+                                                  decoration: const InputDecoration(isDense: true),
                                                   items: const [
-                                                    DropdownMenuItem(
-                                                        value: 'TDS',
-                                                        child: Text('TDS')),
-                                                    DropdownMenuItem(
-                                                        value: 'TCS',
-                                                        child: Text('TCS')),
-                                                    DropdownMenuItem(
-                                                        value: 'Penalty',
-                                                        child: Text('Penalty')),
-                                                    DropdownMenuItem(
-                                                        value: 'Other',
-                                                        child: Text('Other')),
+                                                    DropdownMenuItem(value: 'TDS', child: Text('TDS')),
+                                                    DropdownMenuItem(value: 'TCS', child: Text('TCS')),
+                                                    DropdownMenuItem(value: 'Penalty', child: Text('Penalty')),
+                                                    DropdownMenuItem(value: 'Other', child: Text('Other')),
                                                   ],
                                                   onChanged: (val) {
                                                     if (val != null) {
@@ -7855,10 +6787,8 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                                 flex: 2,
                                                 child: TextField(
                                                   controller: row.percentCtrl,
-                                                  keyboardType:
-                                                      TextInputType.number,
-                                                  decoration:
-                                                      const InputDecoration(
+                                                  keyboardType: TextInputType.number,
+                                                  decoration: const InputDecoration(
                                                     labelText: 'Rate %',
                                                     isDense: true,
                                                   ),
@@ -7867,20 +6797,13 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                               const SizedBox(width: 8),
                                               Text(
                                                 '-${CurrencyService.format(baseAmount * (double.tryParse(row.percentCtrl.text) ?? 0) / 100)}',
-                                                style: const TextStyle(
-                                                    fontWeight: FontWeight.w600,
-                                                    fontSize: 13,
-                                                    color: Colors.red),
+                                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.red),
                                               ),
                                               IconButton(
-                                                icon: const Icon(
-                                                    Icons.delete_outline,
-                                                    size: 18,
-                                                    color: Colors.red),
+                                                icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
                                                 onPressed: () {
                                                   setState(() {
-                                                    deductionRows
-                                                        .removeAt(index);
+                                                    deductionRows.removeAt(index);
                                                   });
                                                   _recalculate();
                                                 },
@@ -7900,8 +6823,7 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                               elevation: 0,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
-                                side:
-                                    const BorderSide(color: Color(0xFFE2E8F0)),
+                                side: const BorderSide(color: Color(0xFFE2E8F0)),
                               ),
                               color: Colors.white,
                               margin: const EdgeInsets.only(bottom: 12),
@@ -7910,48 +6832,31 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text('Payment & Status',
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 13,
-                                            color: Color(0xFF1E293B))),
+                                    const Text('Payment & Status', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B))),
                                     const SizedBox(height: 12),
                                     Row(
                                       children: [
                                         Expanded(
-                                          child:
-                                              DropdownButtonFormField<String>(
-                                            initialValue: paymentMethod,
-                                            decoration: const InputDecoration(
-                                                labelText: 'Payment Method'),
+                                          child: DropdownButtonFormField<String>(
+                                            value: paymentMethod,
+                                            decoration: const InputDecoration(labelText: 'Payment Method'),
                                             items: paymentMethodsList.map((m) {
-                                              return DropdownMenuItem(
-                                                  value: m, child: Text(m));
+                                              return DropdownMenuItem(value: m, child: Text(m));
                                             }).toList(),
-                                            onChanged: (val) => setState(() =>
-                                                paymentMethod = val ?? 'CASH'),
+                                            onChanged: (val) => setState(() => paymentMethod = val ?? 'CASH'),
                                           ),
                                         ),
                                         const SizedBox(width: 12),
                                         Expanded(
-                                          child:
-                                              DropdownButtonFormField<String>(
-                                            initialValue: status,
-                                            decoration: const InputDecoration(
-                                                labelText: 'Status'),
+                                          child: DropdownButtonFormField<String>(
+                                            value: status,
+                                            decoration: const InputDecoration(labelText: 'Status'),
                                             items: const [
-                                              DropdownMenuItem(
-                                                  value: 'Paid',
-                                                  child: Text('Paid')),
-                                              DropdownMenuItem(
-                                                  value: 'Unpaid',
-                                                  child: Text('Unpaid')),
-                                              DropdownMenuItem(
-                                                  value: 'Void',
-                                                  child: Text('Void')),
+                                              DropdownMenuItem(value: 'Paid', child: Text('Paid')),
+                                              DropdownMenuItem(value: 'Unpaid', child: Text('Unpaid')),
+                                              DropdownMenuItem(value: 'Void', child: Text('Void')),
                                             ],
-                                            onChanged: (val) => setState(
-                                                () => status = val ?? 'Paid'),
+                                            onChanged: (val) => setState(() => status = val ?? 'Paid'),
                                           ),
                                         ),
                                       ],
@@ -7959,14 +6864,9 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                     const SizedBox(height: 12),
                                     ListTile(
                                       contentPadding: EdgeInsets.zero,
-                                      title: const Text('Payment Date',
-                                          style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.bold)),
-                                      subtitle: Text(DateFormat('dd-MMM-yyyy')
-                                          .format(paymentDate)),
-                                      trailing: const Icon(Icons.calendar_today,
-                                          size: 18),
+                                      title: const Text('Payment Date', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                      subtitle: Text(DateFormat('dd-MMM-yyyy').format(paymentDate)),
+                                      trailing: const Icon(Icons.calendar_today, size: 18),
                                       onTap: () async {
                                         final picked = await showDatePicker(
                                           context: context,
@@ -7983,11 +6883,9 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                     TextField(
                                       controller: invoiceRefNoCtrl,
                                       decoration: const InputDecoration(
-                                        labelText:
-                                            'Vendor Bill / Invoice Ref No (Optional)',
+                                        labelText: 'Vendor Bill / Invoice Ref No (Optional)',
                                         hintText: 'e.g. BILL-9921',
-                                        prefixIcon:
-                                            Icon(Icons.receipt_long_outlined),
+                                        prefixIcon: Icon(Icons.receipt_long_outlined),
                                       ),
                                     ),
                                     const SizedBox(height: 12),
@@ -7996,8 +6894,7 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                                       maxLines: 2,
                                       decoration: const InputDecoration(
                                         labelText: 'Expense Note / Remarks',
-                                        hintText:
-                                            'Enter any additional details...',
+                                        hintText: 'Enter any additional details...',
                                       ),
                                     ),
                                   ],
@@ -8013,15 +6910,9 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                       flex: 3,
                       child: Container(
                         decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .primaryContainer
-                              .withOpacity(0.2),
+                          color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .primaryContainer),
+                          border: Border.all(color: Theme.of(context).colorScheme.primaryContainer),
                         ),
                         padding: const EdgeInsets.all(16),
                         child: Column(
@@ -8029,81 +6920,55 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                           children: [
                             const Text(
                               'Financial Summary',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 15),
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                               textAlign: TextAlign.center,
                             ),
                             const SizedBox(height: 16),
-                            _summaryRow('Base Amount',
-                                CurrencyService.format(baseAmount)),
+                            _summaryRow('Base Amount', CurrencyService.format(baseAmount)),
                             const SizedBox(height: 8),
-                            _summaryRow('Total Taxes (+)',
-                                CurrencyService.format(totalTaxAmount),
-                                isBold: true),
+                            _summaryRow('Total Taxes (+)', CurrencyService.format(totalTaxAmount), isBold: true),
                             const SizedBox(height: 4),
                             ...taxRows.map((tr) {
-                              final percent =
-                                  double.tryParse(tr.percentCtrl.text) ?? 0.0;
+                              final percent = double.tryParse(tr.percentCtrl.text) ?? 0.0;
                               final rowAmt = baseAmount * (percent / 100);
                               return Padding(
-                                padding:
-                                    const EdgeInsets.only(left: 12, bottom: 4),
+                                padding: const EdgeInsets.only(left: 12, bottom: 4),
                                 child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Text(
-                                        '${tr.isCustom ? tr.nameCtrl.text : tr.taxName} ($percent%)',
-                                        style: const TextStyle(
-                                            fontSize: 11, color: Colors.grey)),
-                                    Text(CurrencyService.format(rowAmt),
-                                        style: const TextStyle(
-                                            fontSize: 11, color: Colors.grey)),
+                                    Text('${tr.isCustom ? tr.nameCtrl.text : tr.taxName} ($percent%)', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                    Text(CurrencyService.format(rowAmt), style: const TextStyle(fontSize: 11, color: Colors.grey)),
                                   ],
                                 ),
                               );
                             }),
                             const Divider(),
-                            _summaryRow('Total Deductions (-)',
-                                '-${CurrencyService.format(totalDeductionAmount)}',
-                                isBold: true, color: Colors.red),
+                            _summaryRow('Total Deductions (-)', '-${CurrencyService.format(totalDeductionAmount)}', isBold: true, color: Colors.red),
                             const SizedBox(height: 4),
                             ...deductionRows.map((dr) {
-                              final percent =
-                                  double.tryParse(dr.percentCtrl.text) ?? 0.0;
+                              final percent = double.tryParse(dr.percentCtrl.text) ?? 0.0;
                               final rowAmt = baseAmount * (percent / 100);
                               return Padding(
-                                padding:
-                                    const EdgeInsets.only(left: 12, bottom: 4),
+                                padding: const EdgeInsets.only(left: 12, bottom: 4),
                                 child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Text('${dr.deductionType} ($percent%)',
-                                        style: const TextStyle(
-                                            fontSize: 11, color: Colors.grey)),
-                                    Text('-${CurrencyService.format(rowAmt)}',
-                                        style: const TextStyle(
-                                            fontSize: 11, color: Colors.grey)),
+                                    Text('${dr.deductionType} ($percent%)', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                    Text('-${CurrencyService.format(rowAmt)}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                                   ],
                                 ),
                               );
                             }),
                             const Divider(height: 24),
                             Container(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .primaryContainer,
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: 8, horizontal: 12),
+                              color: Theme.of(context).colorScheme.primaryContainer,
+                              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                               child: _summaryRow(
                                 'Net Payable',
                                 CurrencyService.format(netPayableAmount),
                                 isBold: true,
                                 fontSize: 16,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onPrimaryContainer,
+                                color: Theme.of(context).colorScheme.onPrimaryContainer,
                               ),
                             ),
                             const Spacer(),
@@ -8112,10 +6977,8 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
                               icon: const Icon(Icons.check),
                               label: const Text('Save Expense'),
                               style: FilledButton.styleFrom(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 16),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12)),
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               ),
                             ),
                           ],
@@ -8132,8 +6995,7 @@ class _ExpenseEntryDialogState extends State<ExpenseEntryDialog> {
     );
   }
 
-  Widget _summaryRow(String label, String value,
-      {bool isBold = false, double fontSize = 13, Color? color}) {
+  Widget _summaryRow(String label, String value, {bool isBold = false, double fontSize = 13, Color? color}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
