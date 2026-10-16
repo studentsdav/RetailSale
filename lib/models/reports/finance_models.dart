@@ -820,10 +820,56 @@ class CustomerLedgerReport {
     double numVal(dynamic v) => double.tryParse((v ?? 0).toString()) ?? 0;
     final cust = json['customer'] as Map<String, dynamic>? ?? {};
     final summary = json['summary'] as Map<String, dynamic>? ?? {};
-    final txns = (json['transactions'] as List? ?? const [])
+    final rawTxns = (json['transactions'] as List? ?? const [])
         .map((e) => CustomerLedgerEntry.fromJson(Map<String, dynamic>.from(e)))
-        .toList()
-      ..sort((a, b) => b.date.compareTo(a.date));
+        .toList();
+
+    final Map<String, int> billIndexMap = {};
+    final List<CustomerLedgerEntry> txns = [];
+
+    for (final tx in rawTxns) {
+      final dateKey = '${tx.date.year}-${tx.date.month.toString().padLeft(2, '0')}-${tx.date.day.toString().padLeft(2, '0')}';
+      final vNo = tx.voucherNo.trim();
+      final isBill = vNo.isNotEmpty &&
+          (tx.voucherType == 'SALE_INVOICE' ||
+              tx.voucherType == 'POS_PAYMENT' ||
+              tx.description.toLowerCase().contains(vNo.toLowerCase()));
+      final mergeKey = isBill ? '$dateKey|$vNo' : null;
+
+      if (mergeKey != null && billIndexMap.containsKey(mergeKey)) {
+        final existingIdx = billIndexMap[mergeKey]!;
+        final existing = txns[existingIdx];
+
+        final combinedDebit = existing.debit + tx.debit;
+        final combinedCredit = existing.credit + tx.credit;
+        final combinedMode = existing.paymentMode.isNotEmpty && existing.paymentMode != 'CREDIT'
+            ? existing.paymentMode
+            : (tx.paymentMode.isNotEmpty ? tx.paymentMode : existing.paymentMode);
+        final combinedDesc = existing.voucherType == 'SALE_INVOICE'
+            ? existing.description
+            : (tx.voucherType == 'SALE_INVOICE' ? tx.description : existing.description);
+        final combinedNotes = existing.notes.isNotEmpty && !existing.notes.startsWith('Mode:')
+            ? existing.notes
+            : (tx.notes.isNotEmpty ? tx.notes : existing.notes);
+
+        txns[existingIdx] = CustomerLedgerEntry(
+          date: existing.date,
+          voucherType: 'SALE_INVOICE',
+          voucherNo: vNo,
+          description: combinedDesc,
+          paymentMode: combinedMode,
+          debit: combinedDebit,
+          credit: combinedCredit,
+          balance: existing.balance,
+          notes: combinedNotes,
+        );
+      } else {
+        if (mergeKey != null) {
+          billIndexMap[mergeKey] = txns.length;
+        }
+        txns.add(tx);
+      }
+    }
 
     return CustomerLedgerReport(
       customerName: (cust['customer_name'] ?? '').toString(),
@@ -834,7 +880,7 @@ class CustomerLedgerReport {
       totalDebit: numVal(summary['total_debit']),
       totalCredit: numVal(summary['total_credit']),
       closingBalance: numVal(summary['closing_balance']),
-      totalTransactions: int.tryParse((summary['total_transactions'] ?? txns.length).toString()) ?? txns.length,
+      totalTransactions: txns.length,
       entries: txns,
     );
   }

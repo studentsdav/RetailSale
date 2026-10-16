@@ -211,14 +211,22 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
   // ================= CALC =================
   double get totalAmount => _items.fold(0, (s, e) => s + e.amount);
   double get totalGST => _items.fold(0, (s, e) => s + e.gst);
-  double get netAmount {
-    final raw = totalAmount + totalGST;
-    return _useInclusiveRates ? raw.roundToDouble() : raw;
-  }
+  double get netAmount => _items.fold(0, (s, e) => s + e.totalAfterTax);
 
   String _fmtNumber(num value) {
     return value % 1 == 0 ? value.toInt().toString() : value.toString();
   }
+
+  void _toggleInclusiveRates(bool value) {
+    if (_useInclusiveRates == value) return;
+    setState(() {
+      _useInclusiveRates = value;
+      if (!value) {
+        _inclusiveRateScope = 'BOTH';
+      }
+    });
+  }
+
 
   // ================= ADD / MODIFY =================
   Future<void> _saveItem() async {
@@ -260,6 +268,14 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
     final buyRate = double.tryParse(_rate.text.trim()) ?? 0;
     final saleRate = double.tryParse(_saleRate.text.trim()) ?? 0;
 
+    final isBuyInclusive = _useInclusiveRates &&
+        (_inclusiveRateScope == 'BOTH' || _inclusiveRateScope == 'BUY_ONLY');
+    final isSaleInclusive = _useInclusiveRates &&
+        (_inclusiveRateScope == 'BOTH' || _inclusiveRateScope == 'SALE_ONLY');
+    final baseBuyRate = isBuyInclusive
+        ? InclusiveRateHelper.exclusiveFromInclusive(buyRate, taxPercent)
+        : buyRate;
+
     final item = ReceiveItem(
       code: _code.text,
       name: _selectedItemName!,
@@ -267,7 +283,11 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
           _filteredBrands.firstWhere((e) => e.id == _selectedBrandItemId).brand,
       unit: _unit.text,
       qty: double.parse(_qty.text),
-      rate: buyRate,
+      rate: baseBuyRate,
+      originalRate: buyRate,
+      isTaxInclusive: isBuyInclusive,
+      isSaleTaxInclusive: isSaleInclusive,
+      inclusiveScope: _useInclusiveRates ? _inclusiveRateScope : 'NONE',
       saleRate: saleRate,
       tax: taxPercent,
       itemId: _selectedBrandItemId.toString(),
@@ -276,6 +296,7 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
       remarks: _remarks.text.trim(),
       lineStatus: 'CLOSED',
     );
+
 
     setState(() {
       if (_editIndex == null) {
@@ -362,6 +383,10 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
                   "qty": e.qty,
                   "item_id": e.itemId,
                   "rate": e.rate,
+                  "original_rate": e.originalRate ?? e.rate,
+                  "is_tax_inclusive": e.isTaxInclusive,
+                  "is_sale_tax_inclusive": e.isSaleTaxInclusive,
+                  "inclusive_scope": e.inclusiveScope,
                   "sale_rate": e.saleRate,
                   "tax": e.tax,
                   "line_status": e.lineStatus,
@@ -372,6 +397,7 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
                       : null
                 })
             .toList(),
+
       );
 
       final departmentItems = _items
@@ -472,12 +498,25 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
     }
     _unit.text = r.unit;
     _qty.text = r.qty.toString();
-    _rate.text = r.rate.toString();
-    _saleRate.text = r.saleRate.toString();
-    _tax.text = r.tax.toString();
+    _rate.text = (r.isTaxInclusive && r.originalRate != null && r.originalRate! > 0)
+        ? _fmtNumber(r.originalRate!)
+        : _fmtNumber(r.rate);
+    _saleRate.text = _fmtNumber(r.saleRate);
+    _tax.text = _fmtNumber(r.tax);
     _remarks.text = r.remarks;
-    _useInclusiveRates = false;
-    _inclusiveRateScope = 'BOTH';
+    _useInclusiveRates = r.isTaxInclusive || r.isSaleTaxInclusive;
+    if (r.inclusiveScope.isNotEmpty && r.inclusiveScope != 'NONE') {
+      _inclusiveRateScope = r.inclusiveScope;
+    } else if (r.isTaxInclusive && r.isSaleTaxInclusive) {
+      _inclusiveRateScope = 'BOTH';
+    } else if (r.isSaleTaxInclusive) {
+      _inclusiveRateScope = 'SALE_ONLY';
+    } else if (r.isTaxInclusive) {
+      _inclusiveRateScope = 'BUY_ONLY';
+    } else {
+      _inclusiveRateScope = 'BOTH';
+    }
+
     _expDate = r.expiryDate ?? DateTime.now();
 
     final hasDepartment =
@@ -638,6 +677,11 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
                           unit: i['unit'],
                           qty: double.parse(i['qty'].toString()),
                           rate: double.tryParse(i['rate'].toString()) ?? 0,
+                          originalRate: i['original_rate'] != null
+                              ? double.tryParse(i['original_rate'].toString())
+                              : null,
+                          isTaxInclusive: i['is_tax_inclusive'] == true ||
+                              i['is_tax_inclusive'] == 1,
                           saleRate:
                               matchedItem?.retailSalePrice.toDouble() ?? 0,
                           tax: (double.tryParse(i['tax'].toString()) ?? 0) > 0
@@ -647,6 +691,7 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
                           expiryDate: null,
                           department: i['department'],
                           lineStatus: 'CLOSED'),
+
                     );
                   }
                 });
@@ -832,22 +877,30 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
                     .toList(),
                 onChanged: (v) {
                   final selected = _filteredBrands.firstWhere((e) => e.id == v);
+                  final tax = selected.taxPercent;
+                  final buyRate = selected.rate;
+                  final isInclusive = selected.isTaxInclusive;
 
                   setState(() {
                     _selectedBrandItemId = v;
 
                     _code.text = selected.itemCode;
                     _unit.text = selected.unit;
-                    _rate.text = selected.rate.toString();
-                    _saleRate.text = selected.retailSalePrice.toString();
-                    _tax.text = selected.taxPercent.toString();
+                    _rate.text = buyRate > 0
+                        ? (buyRate % 1 == 0 ? buyRate.toInt().toString() : buyRate.toStringAsFixed(2))
+                        : '';
+                    _saleRate.text = selected.retailSalePrice > 0
+                        ? (selected.retailSalePrice % 1 == 0 ? selected.retailSalePrice.toInt().toString() : selected.retailSalePrice.toStringAsFixed(2))
+                        : '';
+                    _tax.text = tax % 1 == 0 ? tax.toInt().toString() : tax.toString();
                     _isStockable = selected.stockable;
-                    _useInclusiveRates = false;
+                    _useInclusiveRates = isInclusive;
                     _inclusiveRateScope = 'BOTH';
                     if (_isStockable) {
                       _selectedDepartment = null;
                     }
                   });
+
                   _qtyFocus.requestFocus();
                 },
                 decoration: const InputDecoration(labelText: 'Brand'),
@@ -875,12 +928,7 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
                   }
                   if (event.logicalKey == LogicalKeyboardKey.enter ||
                       event.logicalKey == LogicalKeyboardKey.numpadEnter) {
-                    setState(() {
-                      _useInclusiveRates = !_useInclusiveRates;
-                      if (!_useInclusiveRates) {
-                        _inclusiveRateScope = 'BOTH';
-                      }
-                    });
+                    _toggleInclusiveRates(!_useInclusiveRates);
                     if (_useInclusiveRates) {
                       _scopeFocus.requestFocus();
                     } else {
@@ -905,12 +953,7 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
                 value: _useInclusiveRates,
                 contentPadding: EdgeInsets.zero,
                 onChanged: (value) {
-                  setState(() {
-                    _useInclusiveRates = value;
-                    if (!value) {
-                      _inclusiveRateScope = 'BOTH';
-                    }
-                  });
+                  _toggleInclusiveRates(value);
                   if (value) {
                     _scopeFocus.requestFocus();
                   } else {
@@ -1187,7 +1230,23 @@ class _GoodsReceivingScreenState extends State<GoodsReceivingScreen> {
                         DataCell(Text(r.name)),
                         DataCell(Text(r.brand)),
                         DataCell(Text(r.unit)),
-                        DataCell(Text(CurrencyService.format(r.rate))),
+                        DataCell(
+                          r.isTaxInclusive && r.originalRate != null && r.originalRate! > 0
+                              ? Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(CurrencyService.format(r.rate)),
+                                    Text(
+                                      '(${CurrencyService.format(r.originalRate!)} Incl)',
+                                      style: const TextStyle(
+                                          fontSize: 10, color: Colors.blueGrey),
+                                    ),
+                                  ],
+                                )
+                              : Text(CurrencyService.format(r.rate)),
+                        ),
+
                         DataCell(Text(CurrencyService.format(r.saleRate))),
                         DataCell(Text(r.tax.toStringAsFixed(2))),
                         DataCell(Text(_fmtNumber(r.qty))),

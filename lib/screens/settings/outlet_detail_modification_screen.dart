@@ -463,6 +463,15 @@ class _OutletDetailModificationScreenState extends State<OutletDetailModificatio
 
       await ctrl.save(payload);
       try {
+        final userMap = await TokenStorage.getUser();
+        if (userMap != null) {
+          userMap['outlet_name'] = _propertyName.text.trim();
+          userMap['property_name'] = _propertyName.text.trim();
+          userMap['name'] = _propertyName.text.trim();
+          await TokenStorage.saveUser(userMap);
+        }
+      } catch (_) {}
+      try {
         if (mounted) {
           final rootCtrl = context.read<PropertyInfoController>();
           rootCtrl.data = payload;

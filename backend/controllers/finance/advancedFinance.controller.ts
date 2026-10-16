@@ -2631,20 +2631,21 @@ exports.getCustomerLedger = async (req, res) => {
 
         const rawTransactions = [];
 
+        const toYmd = (val: any): string => {
+            if (!val) return '';
+            if (typeof val === 'string') return val.slice(0, 10);
+            if (val instanceof Date) {
+                const y = val.getFullYear();
+                const m = String(val.getMonth() + 1).padStart(2, '0');
+                const d = String(val.getDate()).padStart(2, '0');
+                return `${y}-${m}-${d}`;
+            }
+            return String(val).slice(0, 10);
+        };
+
         for (const sale of sales) {
             const netAmount = toAmount(sale.net_amount);
-            rawTransactions.push({
-                date: sale.sale_date,
-                sort_time: sale.created_at || sale.sale_date,
-                id: `sale-${sale.id}`,
-                voucher_type: 'SALE_INVOICE',
-                voucher_no: sale.sale_no,
-                description: `Invoice #${sale.sale_no} (${sale.order_type || 'Sale'})`,
-                payment_mode: sale.payment_mode || 'CREDIT',
-                debit: netAmount,
-                credit: 0,
-                notes: `Mode: ${sale.payment_mode || 'CREDIT'}`
-            });
+            const saleYmd = toYmd(sale.sale_date);
 
             const repaymentTotal = (sale.repayments || []).reduce((sum, p) => sum + toAmount(p.amount), 0);
             const parsedInitial = extractInitialPaid(sale);
@@ -2652,22 +2653,44 @@ exports.getCustomerLedger = async (req, res) => {
                 ? parsedInitial
                 : Math.max(0, toAmount(sale.amount_paid) - repaymentTotal);
 
-            if (initialPaid > 0.009) {
-                rawTransactions.push({
-                    date: sale.sale_date,
-                    sort_time: sale.created_at || sale.sale_date,
-                    id: `pay-${sale.id}`,
-                    voucher_type: 'POS_PAYMENT',
-                    voucher_no: sale.sale_no,
-                    description: `POS Payment on #${sale.sale_no}`,
-                    payment_mode: sale.payment_mode || 'CASH',
-                    debit: 0,
-                    credit: toAmount(initialPaid),
-                    notes: 'Paid at checkout'
-                });
-            }
+            const sameDateRepayments: any[] = [];
+            const otherDateRepayments: any[] = [];
 
             for (const p of (sale.repayments || [])) {
+                const isAdvanceAdjust = String(p.payment_mode || '').toUpperCase() === 'ADVANCE';
+                if (!isAdvanceAdjust && toYmd(p.payment_date) === saleYmd) {
+                    sameDateRepayments.push(p);
+                } else {
+                    otherDateRepayments.push(p);
+                }
+            }
+
+            const sameDateRepaymentTotal = sameDateRepayments.reduce((sum, p) => sum + toAmount(p.amount), 0);
+            const sameDateCredit = roundAmount(initialPaid + sameDateRepaymentTotal);
+
+            let noteText = `Mode: ${sale.payment_mode || 'CREDIT'}`;
+            if (sameDateCredit >= netAmount && netAmount > 0) {
+                noteText = initialPaid > 0.009 ? 'Paid at checkout' : 'Settled on same date';
+            } else if (sameDateCredit > 0.009) {
+                noteText = `Partially paid (${sameDateCredit}) on bill date`;
+            }
+
+            rawTransactions.push({
+                date: sale.sale_date,
+                sort_time: sale.created_at || sale.sale_date,
+                id: `sale-${sale.id}`,
+                voucher_type: 'SALE_INVOICE',
+                voucher_no: sale.sale_no,
+                description: `Invoice #${sale.sale_no} (${sale.order_type || 'Sale'})`,
+                payment_mode: sameDateCredit > 0.009
+                    ? (sale.payment_mode || (sameDateRepayments[0]?.payment_mode || 'CASH'))
+                    : (sale.payment_mode || 'CREDIT'),
+                debit: netAmount,
+                credit: sameDateCredit,
+                notes: noteText
+            });
+
+            for (const p of otherDateRepayments) {
                 const isAdvanceAdjust = String(p.payment_mode || '').toUpperCase() === 'ADVANCE';
                 rawTransactions.push({
                     date: p.payment_date,

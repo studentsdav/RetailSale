@@ -15,6 +15,7 @@ module.exports = (sequelize, DataTypes) => {
         initial_amount_paid: DataTypes.DECIMAL(12, 2),
         amount_paid: DataTypes.DECIMAL(12, 2),
         change_amount: DataTypes.DECIMAL(12, 2),
+        advance_amount: DataTypes.DECIMAL(12, 2),
         balance_due: DataTypes.DECIMAL(12, 2),
         order_type: DataTypes.STRING,
         billing_country: DataTypes.STRING,
@@ -97,6 +98,12 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'sale_id',
             as: 'consumptions'
          });
+         if (models.customer_advances) {
+            salesHeader.hasMany(models.customer_advances, {
+                foreignKey: 'source_sale_id',
+                as: 'advances'
+            });
+         }
     };
 
     return salesHeader;

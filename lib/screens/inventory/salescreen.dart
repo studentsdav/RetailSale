@@ -7649,15 +7649,35 @@ class _SaleScreenState extends State<SaleScreen> {
       );
       return;
     }
+    List<_PaymentLine> refPaymentEntries = List<_PaymentLine>.from(normalizedPayments.entries);
+    if (paymentSummary.advanceCreatedAmount > 0.009) {
+      final adv = paymentSummary.advanceCreatedAmount;
+      double remainingAdv = adv;
+      final adjusted = <_PaymentLine>[];
+      for (final e in refPaymentEntries) {
+        if (remainingAdv > 0 && e.method != 'CREDIT' && e.amount > 0) {
+          final deduct = e.amount >= remainingAdv ? remainingAdv : e.amount;
+          final net = e.amount - deduct;
+          remainingAdv -= deduct;
+          if (net > 0.009) {
+            adjusted.add(_PaymentLine(method: e.method, amount: net));
+          }
+        } else {
+          adjusted.add(e);
+        }
+      }
+      adjusted.add(_PaymentLine(method: 'ADVANCE_DEPOSIT', amount: adv));
+      refPaymentEntries = adjusted;
+    }
     final paymentReference = (isUnsettledSale && _checkoutSummary == null)
         ? null
-        : _encodePaymentReference(normalizedPayments.entries);
+        : _encodePaymentReference(refPaymentEntries);
     final noteParts = <String>[];
     if (_notes.text.trim().isNotEmpty) {
       noteParts.add(_notes.text.trim());
     }
     if (!isUnsettledSale || _checkoutSummary != null) {
-      noteParts.add('Payment: ${_paymentSummaryText(normalizedPayments.entries)}');
+      noteParts.add('Payment: ${_paymentSummaryText(refPaymentEntries)}');
     }
     final retailRoundOff = _billRoundOffAmount;
     if (retailRoundOff.abs() > 0.009) {
@@ -7730,6 +7750,7 @@ class _SaleScreenState extends State<SaleScreen> {
       paymentReference: paymentReference,
       amountPaid: paymentSummary.collectedAmount,
       changeAmount: paymentSummary.refundAmount,
+      advanceAmount: paymentSummary.advanceCreatedAmount,
       balanceDue: paymentSummary.balanceDue,
       subTotal: invoice.subTotal,
       totalQty: invoice.totalQty,

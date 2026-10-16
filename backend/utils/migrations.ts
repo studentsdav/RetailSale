@@ -4261,6 +4261,17 @@ COMMIT;
         COMMIT;
       `);
     }
+  },
+  {
+    version: 117,
+    description: "Add advance_amount to sales_headers for tracking customer advance deposits on sales",
+    up: async (db: any) => {
+      await db.query(`
+        BEGIN;
+        ALTER TABLE sales_headers ADD COLUMN IF NOT EXISTS advance_amount DECIMAL(12, 2) DEFAULT 0;
+        COMMIT;
+      `);
+    }
   }
 ];
 

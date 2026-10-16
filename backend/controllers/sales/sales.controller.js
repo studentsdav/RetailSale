@@ -3237,6 +3237,7 @@ async function createSaleVersion({
         initial_amount_paid: amountPaid,
         amount_paid: amountPaid,
         change_amount: effectiveChangeAmount,
+        advance_amount: toAmount(header.advance_amount ?? header.advanceAmount ?? 0),
         balance_due: effectiveBalanceDue,
         total_qty: totalQty,
         sub_total: subTotal,

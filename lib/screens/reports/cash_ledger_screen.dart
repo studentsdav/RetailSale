@@ -1947,23 +1947,46 @@ class _CashLedgerScreenState extends State<CashLedgerScreen>
                                                     Row(
                                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                                       children: [
-                                                        Column(
-                                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                                          children: [
-                                                            Text(
-                                                              isDebit ? 'Debit (Charges)' : 'Credit (Paid)',
-                                                              style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
-                                                            ),
-                                                            Text(
-                                                              isDebit ? _money(tx.debit) : _money(tx.credit),
-                                                              style: TextStyle(
-                                                                fontSize: 13,
-                                                                fontWeight: FontWeight.bold,
-                                                                color: isDebit ? const Color(0xFFDC2626) : const Color(0xFF16A34A),
+                                                        if (tx.debit > 0.009 && tx.credit > 0.009) ...[
+                                                          Column(
+                                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                                            children: [
+                                                              Text('Debit (Charges)', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                                                              Text(
+                                                                _money(tx.debit),
+                                                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFFDC2626)),
                                                               ),
-                                                            ),
-                                                          ],
-                                                        ),
+                                                            ],
+                                                          ),
+                                                          Column(
+                                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                                            children: [
+                                                              Text('Credit (Paid)', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                                                              Text(
+                                                                _money(tx.credit),
+                                                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ] else ...[
+                                                          Column(
+                                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                                            children: [
+                                                              Text(
+                                                                isDebit ? 'Debit (Charges)' : 'Credit (Paid)',
+                                                                style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                                                              ),
+                                                              Text(
+                                                                isDebit ? _money(tx.debit) : _money(tx.credit),
+                                                                style: TextStyle(
+                                                                  fontSize: 13,
+                                                                  fontWeight: FontWeight.bold,
+                                                                  color: isDebit ? const Color(0xFFDC2626) : const Color(0xFF16A34A),
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ],
                                                         Column(
                                                           crossAxisAlignment: CrossAxisAlignment.end,
                                                           children: [

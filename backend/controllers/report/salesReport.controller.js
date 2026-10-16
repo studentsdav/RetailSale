@@ -199,7 +199,12 @@ exports.getSalesReport = async (req, res) => {
                     model: req.propertyDb.models.customer_repayments,
                     as: 'repayments',
                     required: false
-                }
+                },
+                ...(req.propertyDb.models.customer_advances ? [{
+                    model: req.propertyDb.models.customer_advances,
+                    as: 'advances',
+                    required: false
+                }] : [])
             ],
             order: [['sale_date', 'DESC'], ['id', 'DESC']]
         });
@@ -658,6 +663,24 @@ exports.getSalesReport = async (req, res) => {
                     }
                 }
 
+                if (advanceAmount <= 0.009) {
+                    advanceAmount = toNumber(sale.advance_amount);
+                    if (advanceAmount <= 0.009 && Array.isArray(sale.advances) && sale.advances.length > 0) {
+                        advanceAmount = sale.advances.reduce((s, a) => s + toNumber(a.original_amount), 0);
+                    }
+                }
+
+                if (advanceAmount > 0.009) {
+                    const overpay = Math.max(0, (cashAmount + cardAmount + upiAmount + otherAmount) - Math.max(0, saleNetRevenue - advanceAdjustmentAmount));
+                    if (overpay > 0.009) {
+                        const deduct = Math.min(advanceAmount, overpay);
+                        if (cashAmount >= deduct) cashAmount -= deduct;
+                        else if (upiAmount >= deduct) upiAmount -= deduct;
+                        else if (cardAmount >= deduct) cardAmount -= deduct;
+                        else if (otherAmount >= deduct) otherAmount -= deduct;
+                    }
+                }
+
                 if (subscriptionNet > 0 && advanceAdjustmentAmount === 0) {
                     advanceAdjustmentAmount = subscriptionNet;
                 }
@@ -697,11 +720,13 @@ exports.getSalesReport = async (req, res) => {
                         effectivePaymentMode = 'CREDIT';
                     }
                 } else {
-                    const nonCreditLines = effectiveLines.filter(l => l.method !== 'CREDIT');
+                    const nonCreditLines = effectiveLines.filter(l => l.method !== 'CREDIT' && l.method !== 'ADVANCE_DEPOSIT' && l.method !== 'ADVANCE_ADDED');
                     if (nonCreditLines.length === 1) {
                         effectivePaymentMode = nonCreditLines[0].method;
                     } else if (nonCreditLines.length > 1) {
                         effectivePaymentMode = 'SPLIT';
+                    } else if (sale.payment_mode) {
+                        effectivePaymentMode = sale.payment_mode;
                     }
                 }
 
@@ -710,13 +735,41 @@ exports.getSalesReport = async (req, res) => {
                 if (subscriptionNet > 0) {
                     paymentSplits.push({ mode: 'SUBSCRIPTION', amount: subscriptionNet });
                 }
-                if (cashAmount > 0.009) paymentSplits.push({ mode: 'CASH', amount: cashAmount });
-                if (cardAmount > 0.009) paymentSplits.push({ mode: 'CARD', amount: cardAmount });
-                if (upiAmount > 0.009) paymentSplits.push({ mode: 'UPI', amount: upiAmount });
-                if (creditAmount > 0.009) paymentSplits.push({ mode: 'CREDIT', amount: creditAmount });
-                if (otherAmount > 0.009) paymentSplits.push({ mode: 'OTHER', amount: otherAmount });
-                if (advanceAmount > 0.009) paymentSplits.push({ mode: 'ADVANCE DEPOSIT', amount: advanceAmount });
-                if (advanceAdjustmentAmount > 0.009) paymentSplits.push({ mode: 'ADVANCE ADJUSTED', amount: advanceAdjustmentAmount });
+
+                // In Payment Wise, cash/tender received includes advance deposited at the time of sale.
+                let advMode = 'CASH';
+                if (Array.isArray(sale.advances) && sale.advances.length > 0) {
+                    const firstAdv = sale.advances[0];
+                    if (firstAdv.payment_mode) {
+                        advMode = String(firstAdv.payment_mode).toUpperCase();
+                    }
+                } else if (sale.payment_mode && String(sale.payment_mode).toUpperCase() !== 'SPLIT') {
+                    advMode = String(sale.payment_mode).toUpperCase();
+                }
+
+                let effectiveCash = cashAmount;
+                let effectiveCard = cardAmount;
+                let effectiveUpi = upiAmount;
+                let effectiveOther = otherAmount;
+
+                if (advanceAmount > 0.009) {
+                    if (advMode === 'CARD') {
+                        effectiveCard += advanceAmount;
+                    } else if (advMode === 'UPI') {
+                        effectiveUpi += advanceAmount;
+                    } else if (advMode === 'CASH') {
+                        effectiveCash += advanceAmount;
+                    } else {
+                        effectiveOther += advanceAmount;
+                    }
+                }
+
+                if (effectiveCash > 0.009) paymentSplits.push({ mode: 'CASH', amount: roundAmount(effectiveCash) });
+                if (effectiveCard > 0.009) paymentSplits.push({ mode: 'CARD', amount: roundAmount(effectiveCard) });
+                if (effectiveUpi > 0.009) paymentSplits.push({ mode: 'UPI', amount: roundAmount(effectiveUpi) });
+                if (creditAmount > 0.009) paymentSplits.push({ mode: 'CREDIT', amount: roundAmount(creditAmount) });
+                if (effectiveOther > 0.009) paymentSplits.push({ mode: 'OTHER', amount: roundAmount(effectiveOther) });
+                if (advanceAdjustmentAmount > 0.009) paymentSplits.push({ mode: 'ADVANCE ADJUSTED', amount: roundAmount(advanceAdjustmentAmount) });
 
                 if (paymentSplits.length === 0 && saleNetRevenue > 0) {
                     const mode = String(effectivePaymentMode || 'CASH').toUpperCase();

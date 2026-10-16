@@ -174,12 +174,22 @@ exports.savePropertyInfo = async (req, res) => {
             });
             if (outletObj) {
                 const outletUpdates = {};
-                if (req.body.property_name) outletUpdates.property_name = req.body.property_name;
-                if (req.body.business_type) outletUpdates.business_type = req.body.business_type;
-                if (req.body.outlet_module) outletUpdates.outlet_module = req.body.outlet_module;
+                if (req.body.property_name) {
+                    outletUpdates.property_name = req.body.property_name;
+                    outletUpdates.outlet_name = req.body.property_name;
+                }
+                if (req.body.business_type) {
+                    outletUpdates.business_type = req.body.business_type;
+                    outletUpdates.outlet_type = req.body.business_type;
+                }
+                if (req.body.outlet_module) {
+                    outletUpdates.outlet_module = req.body.outlet_module;
+                    outletUpdates.business_module = req.body.outlet_module;
+                }
                 if (req.body.recovery_pin) outletUpdates.recovery_pin = req.body.recovery_pin;
                 if (req.body.mobile) outletUpdates.contact_phone = req.body.mobile;
                 if (req.body.email) outletUpdates.contact_email = req.body.email;
+                if (req.body.gst_no) outletUpdates.tax_id = req.body.gst_no;
                 if (Object.keys(outletUpdates).length > 0) {
                     await outletObj.update(outletUpdates, { transaction: t }).catch(() => {});
                 }

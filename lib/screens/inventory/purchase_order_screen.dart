@@ -105,11 +105,9 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
   // ================= TOTAL =================
   double get totalAmount => _items.fold(0, (s, e) => s + e.amount);
   double get totalGST =>
-      _items.fold(0, (s, e) => s + ((e.qty * e.rate) * (e.tax / 100)));
-  double get netAmount {
-    final raw = totalAmount + totalGST;
-    return _rateInclusive ? raw.roundToDouble() : raw;
-  }
+      _items.fold(0, (s, e) => s + e.taxAmount);
+  double get netAmount => _items.fold(0, (s, e) => s + e.totalAfterTax);
+
 
   String _fmtNumber(num value) {
     return value % 1 == 0 ? value.toDouble().toString() : value.toString();
@@ -262,6 +260,10 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
               : (matchedItem != null ? matchedItem.taxPercent : 0.0);
 
           if (matchedItem != null) {
+            final isIncl = matchedItem.isTaxInclusive;
+            final baseRate = isIncl
+                ? InclusiveRateHelper.exclusiveFromInclusive(effectiveRate, effectiveTax)
+                : effectiveRate;
             prefilledItems.add(PurchaseItem(
               itemId: matchedItem.id,
               itemCode: matchedItem.itemCode,
@@ -269,7 +271,9 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
               brand: matchedItem.brand.isNotEmpty ? matchedItem.brand : 'General',
               unit: matchedItem.unit.isNotEmpty ? matchedItem.unit : 'PCS',
               qty: qtyVal > 0 ? qtyVal : 10.0,
-              rate: effectiveRate,
+              rate: baseRate,
+              originalRate: effectiveRate,
+              isTaxInclusive: isIncl,
               tax: effectiveTax,
               department: '',
             ));
@@ -282,10 +286,13 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
               unit: 'PCS',
               qty: qtyVal > 0 ? qtyVal : 10.0,
               rate: effectiveRate,
+              originalRate: effectiveRate,
+              isTaxInclusive: false,
               tax: effectiveTax,
               department: '',
             ));
           }
+
         }
       }
     }
@@ -300,6 +307,14 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
       }
     });
   }
+
+  void _toggleRateInclusive(bool value) {
+    if (_rateInclusive == value) return;
+    setState(() {
+      _rateInclusive = value;
+    });
+  }
+
 
   // ================= ADD / UPDATE ITEM =================
   Future<void> _saveItem() async {
@@ -351,10 +366,13 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
       unit: _unit.text,
       qty: double.parse(_qty.text),
       rate: baseRate,
+      originalRate: enteredRate,
+      isTaxInclusive: _rateInclusive,
       tax: taxPercent,
       itemId: int.parse(_selectedBrandItemId.toString()),
       department: !_isStockable ? _selectedDepartment!.id.toString() : "",
     );
+
 
     setState(() {
       if (_editIndex == null) {
@@ -404,10 +422,13 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
         itemCtrl.list.where((e) => e.itemName == r.itemName).toList();
     _selectedBrandItemId = r.itemId;
     _unit.text = r.unit;
-    _qty.text = r.qty.toString();
-    _rate.text = r.rate.toString();
+    _qty.text = _fmtNumber(r.qty);
+    _rate.text = (r.isTaxInclusive && r.originalRate != null && r.originalRate! > 0)
+        ? _fmtNumber(r.originalRate!)
+        : _fmtNumber(r.rate);
     _isStockable = r.department.isEmpty;
-    _rateInclusive = false;
+    _rateInclusive = r.isTaxInclusive;
+
     final deptId = int.tryParse(r.department ?? "");
 
     if (deptId != null) {
@@ -496,9 +517,12 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
             unit: e.unit,
             qty: e.qty,
             rate: e.rate,
+            originalRate: e.originalRate ?? e.rate,
+            isTaxInclusive: e.isTaxInclusive,
             tax: e.tax,
             department: e.department,
           );
+
         }).toList(),
       );
 
@@ -780,19 +804,25 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
                     selected = _filteredBrands.firstWhere((e) => e.id == v);
                   } catch (_) {}
                   if (selected != null) {
+                    final tax = selected.taxPercent;
+                    final buyRate = selected.rate;
+                    final isInclusive = selected.isTaxInclusive;
                     setState(() {
                       _selectedBrandItemId = v;
                       _code.text = selected!.itemCode;
                       _unit.text = selected.unit;
-                      _rate.text = selected.rate.toString();
-                      _tax.text = selected.taxPercent.toString();
+                      _rate.text = buyRate > 0
+                          ? (buyRate % 1 == 0 ? buyRate.toInt().toString() : buyRate.toStringAsFixed(2))
+                          : '';
+                      _tax.text = tax % 1 == 0 ? tax.toInt().toString() : tax.toString();
                       _isStockable = selected.stockable;
-                      _rateInclusive = false;
+                      _rateInclusive = isInclusive;
                       if (_isStockable) {
                         _selectedDepartment = null;
                       }
                     });
                   }
+
                   _qtyFocus.requestFocus();
                 },
                 decoration: const InputDecoration(labelText: 'Brand'),
@@ -840,9 +870,7 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
                   }
                   if (event.logicalKey == LogicalKeyboardKey.enter ||
                       event.logicalKey == LogicalKeyboardKey.numpadEnter) {
-                    setState(() {
-                      _rateInclusive = !_rateInclusive;
-                    });
+                    _toggleRateInclusive(!_rateInclusive);
                     return KeyEventResult.handled;
                   }
                 }
@@ -854,9 +882,7 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
                 title: const Text('Inclusive'),
                 controlAffinity: ListTileControlAffinity.leading,
                 onChanged: (value) {
-                  setState(() {
-                    _rateInclusive = value ?? false;
-                  });
+                  _toggleRateInclusive(value ?? false);
                   if (!_isStockable) {
                     _departmentFocus.requestFocus();
                   } else {
@@ -968,7 +994,23 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
                       DataCell(Text(r.brand)),
                       DataCell(Text(r.unit)),
                       DataCell(Text(_fmtNumber(r.qty))),
-                      DataCell(Text(CurrencyService.format(r.rate))),
+                      DataCell(
+                        r.isTaxInclusive && r.originalRate != null && r.originalRate! > 0
+                            ? Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(CurrencyService.format(r.rate)),
+                                  Text(
+                                    '(${CurrencyService.format(r.originalRate!)} Incl)',
+                                    style: const TextStyle(
+                                        fontSize: 10, color: Colors.blueGrey),
+                                  ),
+                                ],
+                              )
+                            : Text(CurrencyService.format(r.rate)),
+                      ),
+
                       DataCell(Text(r.tax.toStringAsFixed(2))),
                       DataCell(Text(CurrencyService.format(r.amount))),
                       DataCell(Text(depname)),
@@ -1236,9 +1278,8 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
 
   Future<void> _sendPoEmailToAddress(String emailAddr, String vendorName) async {
     try {
-      final totalGST = _items.fold<double>(
-          0, (sum, item) => sum + ((item.qty * item.rate) * (item.tax / 100)));
-      final grandTotal = _rateInclusive ? (totalAmount + totalGST).roundToDouble() : (totalAmount + totalGST);
+      final grandTotal = netAmount;
+
 
       String? pdfBase64;
       try {
@@ -1301,10 +1342,8 @@ class _PurchaseOrderScreenState extends State<PurchaseOrderScreen> {
     final taxAmtLabel = CountryTaxHelper.taxAmountLabel(country, taxMode);
     final taxIdLabel = CountryTaxHelper.taxIdLabel(country);
 
-    final totalGST = _items.fold<double>(
-        0, (sum, item) => sum + ((item.qty * item.rate) * (item.tax / 100)));
+    final grandTotal = netAmount;
 
-    final grandTotal = _rateInclusive ? (totalAmount + totalGST).roundToDouble() : (totalAmount + totalGST);
 
     final property = propertyInfo;
     final logo = await BrandingStorage.loadPdfLogo(property?.logoPath);

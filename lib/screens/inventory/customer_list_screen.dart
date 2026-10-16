@@ -717,10 +717,24 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
     gstCtrl.dispose();
   }
 
+  bool get _showOutletColumn {
+    final outlets = _customers
+        .map((c) => (c.outletName ?? '').trim())
+        .where((name) => name.isNotEmpty)
+        .toSet();
+    return outlets.length > 1;
+  }
+
   Future<void> _exportCustomerListExcel() async {
     final excel = exc.Excel.createExcel();
     final sheet = excel['Customers'];
-    const headers = ['Name', 'Number', 'Address', 'GSTIN', 'Outlet Name'];
+    final headers = [
+      'Name',
+      'Number',
+      'Address',
+      'GSTIN',
+      if (_showOutletColumn) 'Outlet Name',
+    ];
 
     for (var i = 0; i < headers.length; i++) {
       sheet
@@ -737,7 +751,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
         customer.customerPhone,
         customer.customerAddress,
         customer.customerGstin,
-        customer.outletName ?? 'Store',
+        if (_showOutletColumn) customer.outletName ?? 'Store',
       ];
 
       for (var col = 0; col < values.length; col++) {
@@ -763,6 +777,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
 
   Future<pw.Document> _buildCustomerPdf() async {
     final pdf = await PosInvoicePrinter.createDocument();
+    final showOutlet = _showOutletColumn;
     final rows = _customers
         .map(
           (customer) => [
@@ -772,7 +787,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
             customer.customerPhone,
             customer.customerAddress,
             customer.customerGstin,
-            customer.outletName ?? 'Store',
+            if (showOutlet) customer.outletName ?? 'Store',
           ],
         )
         .toList();
@@ -790,7 +805,13 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
           ),
           pw.SizedBox(height: 12),
           pw.Table.fromTextArray(
-            headers: const ['Name', 'Number', 'Address', 'GSTIN', 'Outlet Name'],
+            headers: [
+              'Name',
+              'Number',
+              'Address',
+              'GSTIN',
+              if (showOutlet) 'Outlet Name',
+            ],
             data: rows,
           ),
         ],
@@ -1144,13 +1165,14 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                                       dataRowMinHeight: 76,
                                       dataRowMaxHeight: 98,
                                       columnSpacing: 18,
-                                      columns: const [
-                                        DataColumn(label: Text('Name')),
-                                        DataColumn(label: Text('Number')),
-                                        DataColumn(label: Text('Address')),
-                                        DataColumn(label: Text('GSTIN')),
-                                        DataColumn(label: Text('Outlet')),
-                                        DataColumn(label: Text('Action')),
+                                      columns: [
+                                        const DataColumn(label: Text('Name')),
+                                        const DataColumn(label: Text('Number')),
+                                        const DataColumn(label: Text('Address')),
+                                        const DataColumn(label: Text('GSTIN')),
+                                        if (_showOutletColumn)
+                                          const DataColumn(label: Text('Outlet')),
+                                        const DataColumn(label: Text('Action')),
                                       ],
                                       rows:
                                           List.generate(_customers.length, (index) {
@@ -1198,45 +1220,46 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                                               ),
                                             ),
                                             DataCell(Text(customer.customerGstin)),
-                                            DataCell(
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(
-                                                  horizontal: 10,
-                                                  vertical: 6,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.green.withOpacity(0.08),
-                                                  borderRadius: BorderRadius.circular(8),
-                                                  border: Border.all(
-                                                    color: Colors.green.withOpacity(0.3),
+                                            if (_showOutletColumn)
+                                              DataCell(
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(
+                                                    horizontal: 10,
+                                                    vertical: 6,
                                                   ),
-                                                ),
-                                                child: Row(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    const Icon(
-                                                      Icons.storefront_outlined,
-                                                      size: 14,
-                                                      color: Colors.green,
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.green.withOpacity(0.08),
+                                                    borderRadius: BorderRadius.circular(8),
+                                                    border: Border.all(
+                                                      color: Colors.green.withOpacity(0.3),
                                                     ),
-                                                    const SizedBox(width: 4),
-                                                    Text(
-                                                      (customer.outletName != null &&
-                                                              customer.outletName!
-                                                                  .trim()
-                                                                  .isNotEmpty)
-                                                          ? customer.outletName!.trim()
-                                                          : 'Store',
-                                                      style: const TextStyle(
-                                                        fontSize: 12,
-                                                        fontWeight: FontWeight.w600,
+                                                  ),
+                                                  child: Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      const Icon(
+                                                        Icons.storefront_outlined,
+                                                        size: 14,
                                                         color: Colors.green,
                                                       ),
-                                                    ),
-                                                  ],
+                                                      const SizedBox(width: 4),
+                                                      Text(
+                                                        (customer.outletName != null &&
+                                                                customer.outletName!
+                                                                    .trim()
+                                                                    .isNotEmpty)
+                                                            ? customer.outletName!.trim()
+                                                            : 'Store',
+                                                        style: const TextStyle(
+                                                          fontSize: 12,
+                                                          fontWeight: FontWeight.w600,
+                                                          color: Colors.green,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
                                                 ),
                                               ),
-                                            ),
                                             DataCell(
                                               SizedBox(
                                                 width: 860,

@@ -1395,6 +1395,38 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       });
     }
 
+    // In Payment Wise, cash/tender received includes advance deposited at the time of sale.
+    // If splits contains ADVANCE_DEPOSIT or ADVANCE_ADDED, fold it into CASH / tender mode.
+    final advIndices = <int>[];
+    double totalAdvDeposit = 0.0;
+    for (int i = 0; i < splits.length; i++) {
+      final m = (splits[i]['mode'] ?? '').toString().toUpperCase();
+      if (m == 'ADVANCE_DEPOSIT' || m == 'ADVANCE_ADDED') {
+        advIndices.add(i);
+        totalAdvDeposit += (splits[i]['amount'] as num).toDouble();
+      }
+    }
+    for (final idx in advIndices.reversed) {
+      splits.removeAt(idx);
+    }
+    if (totalAdvDeposit <= 0.009 && sale.advanceAmount > 0.009) {
+      totalAdvDeposit = sale.advanceAmount;
+    }
+    if (totalAdvDeposit > 0.009) {
+      final String tenderMode = (sale.paymentMode.isNotEmpty && sale.paymentMode.toUpperCase() != 'SPLIT')
+          ? sale.paymentMode.toUpperCase()
+          : (splits.any((s) => (s['mode'] as String).toUpperCase() == 'CASH')
+              ? 'CASH'
+              : (splits.isNotEmpty ? (splits.first['mode'] as String).toUpperCase() : 'CASH'));
+
+      final existingIndex = splits.indexWhere((s) => (s['mode'] as String).toUpperCase() == tenderMode);
+      if (existingIndex != -1) {
+        splits[existingIndex]['amount'] = (splits[existingIndex]['amount'] as num).toDouble() + totalAdvDeposit;
+      } else {
+        splits.add({'mode': tenderMode, 'amount': totalAdvDeposit});
+      }
+    }
+
     // Consolidate duplicate mode entries (e.g. CARD 23.50 + CARD 0.10 roundoff) into a single row per payment mode
     final Map<String, double> consolidated = {};
     for (final item in splits) {
@@ -1503,10 +1535,18 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     for (final sale in _billWiseSales) {
       final splits = _extractPaymentSplits(sale);
       final double totalBillNet = sale.netAmount;
+      final double billPaidAmount = splits.fold<double>(0, (sum, s) => sum + (s['amount'] as double));
       for (final split in splits) {
         final String mode = split['mode'] as String;
         final double amt = split['amount'] as double;
-        final double ratio = totalBillNet > 0 ? (amt / totalBillNet) : 0;
+        double billPortion = amt;
+        if (sale.advanceAmount > 0.009 && billPaidAmount > totalBillNet + 0.009) {
+          final excess = billPaidAmount - totalBillNet;
+          if (amt >= excess) {
+            billPortion = amt - excess;
+          }
+        }
+        final double ratio = totalBillNet > 0 ? (billPortion / totalBillNet).clamp(0.0, 1.0) : 0.0;
 
         rows.add(PaymentBreakdownRow(
           saleDate: sale.saleDate,

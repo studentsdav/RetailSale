@@ -9,6 +9,9 @@ class PurchaseItem {
   double tax;
   String department;
   String lineStatus;
+  final bool isTaxInclusive;
+  final double? originalRate;
+
   PurchaseItem({
     required this.itemId,
     required this.itemCode,
@@ -20,11 +23,13 @@ class PurchaseItem {
     this.tax = 0,
     required this.department,
     this.lineStatus = 'OPEN',
+    this.isTaxInclusive = false,
+    this.originalRate,
   });
 
-  double get amount => qty * rate;
-  double get taxAmount => amount * tax / 100;
-  double get totalAfterTax => amount + taxAmount;
+  double get amount => double.parse((qty * rate).toStringAsFixed(2));
+  double get taxAmount => double.parse((amount * tax / 100).toStringAsFixed(2));
+  double get totalAfterTax => double.parse((amount + taxAmount).toStringAsFixed(2));
 
   factory PurchaseItem.fromJson(Map<String, dynamic> json) {
     return PurchaseItem(
@@ -38,6 +43,8 @@ class PurchaseItem {
       tax: double.tryParse((json['tax'] ?? 0).toString()) ?? 0,
       department: json['department'] ?? '',
       lineStatus: (json['line_status'] ?? 'OPEN').toString(),
+      isTaxInclusive: json['is_tax_inclusive'] == true || json['is_tax_inclusive'] == 1,
+      originalRate: json['original_rate'] != null ? double.tryParse(json['original_rate'].toString()) : null,
     );
   }
 
@@ -52,5 +59,8 @@ class PurchaseItem {
         'tax': tax,
         'department': department,
         'line_status': lineStatus,
+        'is_tax_inclusive': isTaxInclusive,
+        'original_rate': originalRate ?? rate,
       };
 }
+

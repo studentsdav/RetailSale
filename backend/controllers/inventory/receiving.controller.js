@@ -22,8 +22,8 @@ function normalizeLineStatus(value, fallback = 'CLOSED') {
     return normalized === 'OPEN' ? 'OPEN' : 'CLOSED';
 }
 
-async function syncItemPricing({ req, itemCode, purchaseRate, saleRate, transaction }) {
-    if (!itemCode) return;
+async function syncItemPricing({ req, itemCode, itemId, purchaseRate, saleRate, isTaxInclusive, transaction }) {
+    if (!itemCode && !itemId) return;
     const payload = {
         rate: Number(purchaseRate) || 0
     };
@@ -31,13 +31,21 @@ async function syncItemPricing({ req, itemCode, purchaseRate, saleRate, transact
     if (saleRate !== undefined && saleRate !== null) {
         payload.retail_sale_price = Number(saleRate) || 0;
     }
+    if (isTaxInclusive !== undefined && isTaxInclusive !== null) {
+        payload.is_tax_inclusive = isTaxInclusive === true || isTaxInclusive === 'true' || isTaxInclusive === 1;
+    }
+    const where = {
+        outlet_id: req.user.outlet_id
+    };
+    if (itemId) {
+        where.id = itemId;
+    } else {
+        where.item_code = itemCode;
+    }
     await req.propertyDb.models.item_master.update(
         payload,
         {
-            where: {
-                outlet_id: req.user.outlet_id,
-                item_code: itemCode
-            },
+            where,
             transaction
         }
     );
@@ -134,13 +142,21 @@ exports.createReceiving = async (req, res) => {
                 expiry_date: i.expiry_date,
                 remarks: i.remarks || null
             }, { transaction: t });
+            const isSaleInclusive = (i.is_sale_tax_inclusive !== undefined && i.is_sale_tax_inclusive !== null)
+                ? (i.is_sale_tax_inclusive === true || i.is_sale_tax_inclusive === 'true' || i.is_sale_tax_inclusive === 1)
+                : (i.is_tax_inclusive !== undefined && i.is_tax_inclusive !== null
+                    ? (i.is_tax_inclusive === true || i.is_tax_inclusive === 'true' || i.is_tax_inclusive === 1)
+                    : undefined);
             await syncItemPricing({
                 req,
+                itemId: i.item_id,
                 itemCode: i.code,
-                purchaseRate: i.rate,
+                purchaseRate: (i.original_rate !== undefined && i.original_rate !== null && Number(i.original_rate) > 0) ? i.original_rate : i.rate,
                 saleRate: Number(i.sale_rate ?? i.rate) || 0,
+                isTaxInclusive: isSaleInclusive,
                 transaction: t
             });
+
 
 
             await insertLedger({
@@ -338,11 +354,19 @@ exports.updateReceivingItem = async (req, res) => {
             remarks: remarks || null
         }, { transaction: t });
 
+        const isSaleInclusive = (req.body.is_sale_tax_inclusive !== undefined && req.body.is_sale_tax_inclusive !== null)
+            ? (req.body.is_sale_tax_inclusive === true || req.body.is_sale_tax_inclusive === 'true' || req.body.is_sale_tax_inclusive === 1)
+            : (req.body.is_tax_inclusive !== undefined
+                ? (req.body.is_tax_inclusive === true || req.body.is_tax_inclusive === 'true' || req.body.is_tax_inclusive === 1)
+                : undefined);
+
         await syncItemPricing({
             req,
+            itemId: item.item_id,
             itemCode: item.item_code,
-            purchaseRate: rate,
+            purchaseRate: (req.body.original_rate !== undefined && req.body.original_rate !== null && Number(req.body.original_rate) > 0) ? req.body.original_rate : rate,
             saleRate: sale_rate,
+            isTaxInclusive: isSaleInclusive,
             transaction: t
         });
 
@@ -456,11 +480,19 @@ exports.modifyReceiving = async (req, res) => {
                 remarks: i.remarks || null
             }, { transaction: t });
 
+            const isSaleInclusive = (i.is_sale_tax_inclusive !== undefined && i.is_sale_tax_inclusive !== null)
+                ? (i.is_sale_tax_inclusive === true || i.is_sale_tax_inclusive === 'true' || i.is_sale_tax_inclusive === 1)
+                : (i.is_tax_inclusive !== undefined
+                    ? (i.is_tax_inclusive === true || i.is_tax_inclusive === 'true' || i.is_tax_inclusive === 1)
+                    : undefined);
+
             await syncItemPricing({
                 req,
+                itemId: item.item_id,
                 itemCode: item.item_code,
-                purchaseRate: i.rate,
+                purchaseRate: (i.original_rate !== undefined && i.original_rate !== null && Number(i.original_rate) > 0) ? i.original_rate : i.rate,
                 saleRate: saleRate !== null ? saleRate : undefined,
+                isTaxInclusive: isSaleInclusive,
                 transaction: t
             });
 
